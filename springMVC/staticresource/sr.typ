@@ -1,0 +1,1 @@
+#image("solution.png")
