@@ -703,4 +703,540 @@
       #image("Screenshot_20250805_152159.png")
       #image("Screenshot_20250805_152223.png")
     - 利用java代码调用Lua脚本改造分布式锁
+      ```java
+            private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
+
+      static {
+          UNLOCK_SCRIPT = new DefaultRedisScript();
+          UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+          UNLOCK_SCRIPT.setResultType(Long.class);
+      }
+
+      @Override
+      public void unlock() {
+          stringRedisTemplate.execute(UNLOCK_SCRIPT,
+                  Collections.singletonList(KEY_PREFIX + name),
+                  ID_PREFIX + Thread.currentThread().getId());
+      }
+
+      ```
+   
+- 分布式锁-Redisson
+  - 基于SETNX实现的分布式锁存在以下问题 
+    + 重入问题
+      
+      重入问题是指获取锁的线程，可以再次进入到相同的锁的代码块中，可重入锁的意义在于防止死锁，例如在HashTable这样的代码中，它的方法都是使用synchronized修饰的，加入它在一个方法内调用另一个方法，如果此时是不可重入的，那就死锁了。所以可重入锁的主要意义是防止死锁，我们的synchronized和Lock锁都是可重入的
+    + 不可重试 
+      
+      我们编写的分布式锁只能尝试一次，失败了就返回false，没有重试机制。但合理的情况应该是：当线程获取锁失败后，他应该能再次尝试获取锁
+    + 超时释放 
+      
+      我们在加锁的时候增加了TTL，这样我们可以防止死锁，但是如果卡顿(阻塞)时间太长，也会导致锁的释放，因此也有多个线程拿到同一把锁的情况
+    + 主从一致性
+      
+      如果Redis提供了主从集群，那么当我们向集群写数据时，主机需要异步的将数据同步给从机，万一在同步之前，主机宕机了(主从同步存在延迟，虽然时间很短，但还是发生了)，那么就会选取从节点作为新节点，但是新节点没有锁，就会导致多个线程都拿到锁
+  - 什么是redisson
+    
+    Redisson是一个在Redis的基础上实现的Java驻内存数据网格(In-Memory Data Grid)。它不仅提供了一系列的分布式Java常用对象，还提供了许多分布式服务，其中就包含了各种分布式锁的实现
+  - Redis提供了分布式锁的多种功能
+    
+    + 可重入锁
+    + 公平锁
+    + 联锁
+    + 红锁
+    + 读写锁
+    + 信号量
+    + 可过期性信号量
+    + 闭锁
+  - Redisson入门
+    - 导入依赖
+    - 在config包下新建redissonconfig类
+    - 用Rlock接受redissonclient自带的api函数getlock的返回类型
+
+  - Redisson可重入锁原理
+    - 在lock锁中，借助于voalitile的一个state变量来记录重入状态
+      - 如果当前没有人持有这把锁，那么state = 0
+      - 如果有人持有这把锁，那么state = 1
+        - 如果持有者把锁的人再次持有这把锁，那么state会+1
+      - 如果对于synchronize而言，他在c语言代码中会有一个count
+      - 原理与state类似，也是重入一次就+1，释放一次就-1，直至减到0，表示这把锁没有被人持有
+    - 在redisson中，我们也支持可重入锁
+      - 在分布式锁中，它采用hash结构来存储锁，其中外层key表示这把锁是否存在，内层key则记录当前这把锁被哪个线程持有
+
+       method1在方法内部调用method2，method1和method2出于同一个线程，那么method1已经拿到一把锁了，想进入method2中拿另外一把锁，必然是拿不到的，于是就出现了死锁
+      - 所以我们需要额外判断，method1和method2是否处于同一线程，如果是同一个线程，则可以拿到锁，但是state会+1，之后执行method2中的方法，释放锁，释放锁的时候也只是将state进行-1，只有减至0，才会真正释放锁
+       由于我们需要额外存储一个state，所以用字符串型SET NX EX是不行的，需要用到Hash结构，但是Hash结构又没有NX这种方法，所以我们需要将原有的逻辑拆开，进行手动判断
+      - 为了保证原子性，所以流程图中的业务逻辑也是需要我们用Lua来实现的 
+      - 获取锁
+      ```java 
+                local key = KEYS[1]; -- 锁的key
+          local threadId = ARGV[1]; -- 线程唯一标识
+          local releaseTime = ARGV[2]; -- 锁的自动释放时间
+          -- 锁不存在
+          if (redis.call('exists', key) == 0) then
+              -- 获取锁并添加线程标识，state设为1
+              redis.call('hset', key, threadId, '1');
+              -- 设置锁有效期
+              redis.call('expire', key, releaseTime);
+              return 1; -- 返回结果
+          end;
+          -- 锁存在，判断threadId是否为自己
+          if (redis.call('hexists', key, threadId) == 1) then
+              -- 锁存在，重入次数 +1，这里用的是hash结构的incrby增长
+              redis.call('hincrby', key, thread, 1);
+              -- 设置锁的有效期
+              redis.call('expire', key, releaseTime);
+              return 1; -- 返回结果
+          end;
+          return 0; -- 代码走到这里，说明获取锁的不是自己，获取锁失败
+
+      ```
+      - 删除锁
+      ```java 
+              local key = KEYS[1];
+        local threadId = ARGV[1];
+        local releaseTime = ARGV[2];
+        -- 如果锁不是自己的
+        if (redis.call('HEXISTS', key, threadId) == 0) then
+            return nil; -- 直接返回
+        end;
+        -- 锁是自己的，锁计数-1，还是用hincrby，不过自增长的值为-1
+        local count = redis.call('hincrby', key, threadId, -1);
+        -- 判断重入次数为多少
+        if (count > 0) then
+            -- 大于0，重置有效期
+            redis.call('expire', key, releaseTime);
+            return nil;
+        else
+            -- 否则直接释放锁
+            redis.call('del', key);
+            return nil;
+        end;
+
+      ```
+      - 因为 Lua 脚本在 Redis 内部是串行、原子执行的，不会并发。
+  - Redisson锁重试和WatchDog机制
+    - 如果没有指定释放时间时间，则指定默认释放时间为getLockWatchdogTimeout，底层源码显示是30*1000ms，也就是30秒
+      ```java
+          public boolean tryLock(long waitTime, long leaseTime, TimeUnit unit) throws InterruptedException {
+            long time = unit.toMillis(waitTime);
+            long current = System.currentTimeMillis();
+            long threadId = Thread.currentThread().getId();
+            Long ttl = this.tryAcquire(waitTime, leaseTime, unit, threadId);
+            //判断ttl是否为null
+            if (ttl == null) {
+                return true;
+            } else {
+                //计算当前时间与获取锁时间的差值，让等待时间减去这个值
+                time -= System.currentTimeMillis() - current;
+                //如果消耗时间太长了，直接返回false，获取锁失败
+                if (time <= 0L) {
+                    this.acquireFailed(waitTime, unit, threadId);
+                    return false;
+                } else {
+                    //等待时间还有剩余，再次获取当前时间
+                    current = System.currentTimeMillis();
+                    //订阅别人释放锁的信号
+                    RFuture<RedissonLockEntry> subscribeFuture = this.subscribe(threadId);
+                    //在剩余时间内，等待这个信号
+                    if (!subscribeFuture.await(time, TimeUnit.MILLISECONDS)) {
+                        if (!subscribeFuture.cancel(false)) {
+                            subscribeFuture.onComplete((res, e) -> {
+                                if (e == null) {
+                                    //取消订阅
+                                    this.unsubscribe(subscribeFuture, threadId);
+                                }
+
+                            });
+                        }
+                        //剩余时间内没等到，返回false
+                        this.acquireFailed(waitTime, unit, threadId);
+                        return false;
+                    } else {
+                        try {
+                            //如果剩余时间内等到了别人释放锁的信号，再次计算当前剩余最大等待时间
+                            time -= System.currentTimeMillis() - current;
+                            if (time <= 0L) {
+                                //如果剩余时间为负数，则直接返回false
+                                this.acquireFailed(waitTime, unit, threadId);
+                                boolean var20 = false;
+                                return var20;
+                            } else {
+                                boolean var16;
+                                do {
+                                    //如果剩余时间等到了，dowhile循环重试获取锁
+                                    long currentTime = System.currentTimeMillis();
+                                    ttl = this.tryAcquire(waitTime, leaseTime, unit, threadId);
+                                    if (ttl == null) {
+                                        var16 = true;
+                                        return var16;
+                                    }
+
+                                    time -= System.currentTimeMillis() - currentTime;
+                                    if (time <= 0L) {
+                                        this.acquireFailed(waitTime, unit, threadId);
+                                        var16 = false;
+                                        return var16;
+                                    }
+
+                                    currentTime = System.currentTimeMillis();
+                                    if (ttl >= 0L && ttl < time) {
+                                        ((RedissonLockEntry)subscribeFuture.getNow()).getLatch().tryAcquire(ttl, TimeUnit.MILLISECONDS);
+                                    } else {
+                                        ((RedissonLockEntry)subscribeFuture.getNow()).getLatch().tryAcquire(time, TimeUnit.MILLISECONDS);
+                                    }
+
+                                    time -= System.currentTimeMillis() - currentTime;
+                                } while(time > 0L);
+
+                                this.acquireFailed(waitTime, unit, threadId);
+                                var16 = false;
+                                return var16;
+                            }
+                        } finally {
+                            this.unsubscribe(subscribeFuture, threadId);
+                        }
+                    }
+                }
+            }
+        }
+
+      ```
+      - 这里其他函数都可以看一下源码 不做过多记录
+
+  - Redisson锁的Mutilock原理
+    
+    - 为了提高Redis的可用性，我们会搭建集群或者主从，现在以主从为例
+
+    - 此时我们去写命令，写在主机上，主机会将数据同步给从机，但是假设主机还没来得及把数据写入到从机去的时候，主机宕机了
+
+    - 哨兵会发现主机宕机了，于是选举一个slave(从机)变成master(主机)，而此时新的master(主机)上并没有锁的信息，那么其他线程就可以获取锁，又会引发安全问题
+
+    - 为了解决这个问题。Redisson提出来了MutiLock锁，使用这把锁的话，那我们就不用主从了，每个节点的地位都是一样的，都可以当做是主机，那我们就需要将加锁的逻辑写入到每一个主从节点上，只有所有的服务器都写入成功，此时才是加锁成功，假设现在某个节点挂了，那么他去获取锁的时候，只要有一个节点拿不到，都不能算是加锁成功，就保证了加锁的可靠性
+    
+    - 这里深入了解一下联锁的源码，也不做过多记录
+  - 小结
+    #image("Screenshot_20250805_170316.png")
+- 秒杀优化
+  - 当用户发起请求，此时会先请求Nginx，Nginx反向代理到Tomcat，而Tomcat中的程序，会进行串行操作，分为如下几个步骤
+    + 查询优惠券
+    + 判断秒杀库存是否足够
+    + 查询订单
+    + 校验是否一人一单
+    + 扣减库存
+    + 创建订单
+  - 在这六个步骤中，有很多操作都是要去操作数据库的，而且还是一个线程串行执行，这样就会导致我们的程序执行很慢，所以我们需要异步程序执行，那么如何加速呢？
+  - 优化方案：我们将耗时较短的逻辑判断放到Redis中，例如：库存是否充足，是否一人一单这样的操作，只要满足这两条操作，那我们是一定可以下单成功的，不用等数据真的写进数据库，我们直接告诉用户下单成功就好了。然后后台再开一个线程，后台线程再去慢慢执行队列里的消息，这样我们就能很快的完成下单业务。
+  - 但是这里还存在两个难点：
+    + 怎么在Redis中快速校验是否一人一单，还有库存判断
+    + 校验一人一单和将下单数据写入数据库，这是两个线程，我们怎么知道下单是否完成。 
+  - 我们现在来看整体思路：当用户下单之后，判断库存是否充足，只需要取Redis中根据key找对应的value是否大于0即可，如果不充足，则直接结束。如果充足，则在Redis中判断用户是否可以下单，如果set集合中没有该用户的下单数据，则可以下单，并将userId和优惠券存入到Redis中，并且返回0，整个过程需要保证是原子性的，所以我们要用Lua来操作，同时由于我们需要在Redis中查询优惠券信息，所以在我们新增秒杀优惠券的同时，需要将优惠券信息保存到Redis中
+
+    完成以上逻辑判断时，我们只需要判断当前Redis中的返回值是否为0，如果是0，则表示可以下单，将信息保存到queue中去，然后返回，开一个线程来异步下单，可以通过返回订单的id来判断是否下单成功
+  - Redis完成秒杀资格判断
+    - 需求
+      + 新增秒杀优惠券的同时，将优惠券信息保存到Redis中
+      + 基于Lua脚本，判断秒杀库存、一人一单，决定用户是否秒杀成功
+      - 修改保存优惠券相关代码
+      ```java 
+              @Override
+        @Transactional
+        public void addSeckillVoucher(Voucher voucher) {
+            // 保存优惠券
+            save(voucher);
+            // 保存秒杀信息
+            SeckillVoucher seckillVoucher = new SeckillVoucher();
+            seckillVoucher.setVoucherId(voucher.getId());
+            seckillVoucher.setStock(voucher.getStock());
+            seckillVoucher.setBeginTime(voucher.getBeginTime());
+            seckillVoucher.setEndTime(voucher.getEndTime());
+            seckillVoucherService.save(seckillVoucher);
+            // 保存秒杀优惠券信息到Reids，Key名中包含优惠券ID，Value为优惠券的剩余数量
+            stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucher.getId(), voucher.getStock().toString()); 
+        }
+
+      ```
+
+      添加成功后，数据库中和Redis中都能看到优惠券信息
+      - 编写Lua脚本
+      ```java
+              -- 订单id
+        local voucherId = ARGV[1]
+        -- 用户id
+        local userId = ARGV[2]
+        -- 优惠券key
+        local stockKey = 'seckill:stock:' .. voucherId
+        -- 订单key
+        local orderKey = 'seckill:order:' .. voucherId
+        -- 判断库存是否充足
+        if (tonumber(redis.call('get', stockKey)) <= 0) then
+            return 1
+        end
+        -- 判断用户是否下单
+        if (redis.call('sismember', orderKey, userId) == 1) then
+            return 2
+        end
+        -- 扣减库存
+        redis.call('incrby', stockKey, -1)
+        -- 将userId存入当前优惠券的set集合
+        redis.call('sadd', orderKey, userId)
+        return 0
+
+      ```
+      ```java 
+            -- 订单id
+      local voucherId = ARGV[1]
+      -- 用户id
+      local userId = ARGV[2]
+      -- 优惠券key
+      local stockKey = 'seckill:stock:' .. voucherId
+      -- 订单key
+      local orderKey = 'seckill:order:' .. voucherId
+      -- 判断库存是否充足
+      if (tonumber(redis.call('get', stockKey)) <= 0) then
+          return 1
+      end
+      -- 判断用户是否下单
+      if (redis.call('sismember', orderKey, userId) == 1) then
+          return 2
+      end
+      -- 扣减库存
+      redis.call('incrby', stockKey, -1)
+      -- 将userId存入当前优惠券的set集合
+      redis.call('sadd', orderKey, userId)
+      return 0
+      ```
+   - 基于阻塞队列实现秒杀优化
+     - 需求
+       + 如果秒杀成功，则将优惠券id和用户id封装后存入阻塞队列
+       + 开启线程任务，不断从阻塞队列中获取信息，实现异步下单功能
+     - 创建阻塞队列
+       - 阻塞队列有一个特点：当一个线程尝试从阻塞队列里获取元素的时候，如果没有元素，那么该线程就会被阻塞，直到队列中有元素，才会被唤醒，并去获取元素
+       - 阻塞队列的创建需要指定一个大小
+       ```java
+       private final BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
+       ```
+       - 那么把优惠券id和用户id封装后存入阻塞队列
+       ```java
+              @Override
+        public Result seckillVoucher(Long voucherId) {
+            Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
+                    Collections.emptyList(), voucherId.toString(),
+                    UserHolder.getUser().getId().toString());
+            if (result.intValue() != 0) {
+                return Result.fail(result.intValue() == 1 ? "库存不足" : "不能重复下单");
+            }
+            long orderId = redisIdWorker.nextId("order");
+            //封装到voucherOrder中
+            VoucherOrder voucherOrder = new VoucherOrder();
+            voucherOrder.setVoucherId(voucherId);
+            voucherOrder.setUserId(UserHolder.getUser().getId());
+            voucherOrder.setId(orderId);
+            //加入到阻塞队列
+            orderTasks.add(voucherOrder);
+            return Result.ok(orderId);
+        }
+        ```
+      - 实现异步下单功能 
+        - 先创建一个线程池
+        ```java
+        private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
+        ```
+        - 创建线程任务，秒杀业务需要在类初始化之后，就立即执行，所以这里需要用到PostConstruct注解
+        ```java 
+                @PostConstruct
+        private void init() {
+            SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
+        }
+
+        private class VoucherOrderHandler implements Runnable {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        //1. 获取队列中的订单信息
+                        VoucherOrder voucherOrder = orderTasks.take();
+                        //2. 创建订单
+                        handleVoucherOrder(voucherOrder);
+                    } catch (Exception e) {
+                        log.error("订单处理异常", e);
+                    }
+                }
+            }
+        }
+
+        ```
+        - PostConstruct 是 Java 中一个注解，常用于 Spring 框架，用来修饰一个方法，在 依赖注入完成后、在构造方法执行之后 自动执行一次。
+        - 编写创建订单的业务逻辑
+        - 完整代码如下
+        ```java 
+                  package com.hmdp.service.impl;
+
+          import com.hmdp.dto.Result;
+          import com.hmdp.entity.VoucherOrder;
+          import com.hmdp.mapper.VoucherOrderMapper;
+          import com.hmdp.service.ISeckillVoucherService;
+          import com.hmdp.service.IVoucherOrderService;
+          import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+          import com.hmdp.utils.RedisIdWorker;
+          import com.hmdp.utils.UserHolder;
+          import lombok.extern.slf4j.Slf4j;
+          import org.redisson.api.RLock;
+          import org.redisson.api.RedissonClient;
+          import org.springframework.aop.framework.AopContext;
+          import org.springframework.beans.factory.annotation.Autowired;
+          import org.springframework.core.io.ClassPathResource;
+          import org.springframework.data.redis.core.StringRedisTemplate;
+          import org.springframework.data.redis.core.script.DefaultRedisScript;
+          import org.springframework.stereotype.Service;
+          import org.springframework.transaction.annotation.Transactional;
+
+          import javax.annotation.PostConstruct;
+          import javax.annotation.Resource;
+          import java.util.Collections;
+          import java.util.concurrent.ArrayBlockingQueue;
+          import java.util.concurrent.BlockingQueue;
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+
+          /**
+           * <p>
+           * 服务实现类
+           * </p>
+           *
+           * @author Kyle
+           * @since 2022-10-22
+           */
+          @Service
+          @Slf4j
+          public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
+
+              @Autowired
+              private ISeckillVoucherService seckillVoucherService;
+
+              @Autowired
+              private RedisIdWorker redisIdWorker;
+
+              @Resource
+              private StringRedisTemplate stringRedisTemplate;
+
+              @Resource
+              private RedissonClient redissonClient;
+
+              private IVoucherOrderService proxy;
+
+
+              private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+
+              static {
+                  SECKILL_SCRIPT = new DefaultRedisScript();
+                  SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+                  SECKILL_SCRIPT.setResultType(Long.class);
+              }
+
+              private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
+
+              @PostConstruct
+              private void init() {
+                  SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
+              }
+
+              private final BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
+
+              private void handleVoucherOrder(VoucherOrder voucherOrder) {
+                  //1. 获取用户
+                  Long userId = voucherOrder.getUserId();
+                  //2. 创建锁对象，作为兜底方案
+                  RLock redisLock = redissonClient.getLock("order:" + userId);
+                  //3. 获取锁
+                  boolean isLock = redisLock.tryLock();
+                  //4. 判断是否获取锁成功 
+                  if (!isLock) {
+                      log.error("不允许重复下单!");
+                      return;
+                  }
+                  try {
+                      //5. 使用代理对象，由于这里是另外一个线程，
+                      proxy.createVoucherOrder(voucherOrder);
+                  } finally {
+                      redisLock.unlock();
+                  }
+              }
+
+              private class VoucherOrderHandler implements Runnable {
+                  @Override
+                  public void run() {
+                      while (true) {
+                          try {
+                              //1. 获取队列中的订单信息
+                              VoucherOrder voucherOrder = orderTasks.take();
+                              //2. 创建订单
+                              handleVoucherOrder(voucherOrder);
+                          } catch (Exception e) {
+                              log.error("订单处理异常", e);
+                          }
+                      }
+                  }
+              }
+
+              @Override
+              public Result seckillVoucher(Long voucherId) {
+                  Long result = stringRedisTemplate.execute(SECKILL_SCRIPT,
+                          Collections.emptyList(), voucherId.toString(),
+                          UserHolder.getUser().getId().toString());
+                  if (result.intValue() != 0) {
+                      return Result.fail(result.intValue() == 1 ? "库存不足" : "不能重复下单");
+                  }
+                  long orderId = redisIdWorker.nextId("order");
+                  //封装到voucherOrder中
+                  VoucherOrder voucherOrder = new VoucherOrder();
+                  voucherOrder.setVoucherId(voucherId);
+                  voucherOrder.setUserId(UserHolder.getUser().getId());
+                  voucherOrder.setId(orderId);
+                  //加入到阻塞队列
+                  orderTasks.add(voucherOrder);
+                  //主线程获取代理对象
+                  proxy = (IVoucherOrderService) AopContext.currentProxy();
+                  return Result.ok(orderId);
+              }
+
+
+              @Transactional
+              public void createVoucherOrder(VoucherOrder voucherOrder) {
+                  // 一人一单逻辑
+                  Long userId = voucherOrder.getUserId();
+                  Long voucherId = voucherOrder.getVoucherId();
+                  synchronized (userId.toString().intern()) {
+                      int count = query().eq("voucher_id", voucherId).eq("user_id", userId).count();
+                      if (count > 0) {
+                          log.error("你已经抢过优惠券了哦");
+                          return;
+                      }
+                      //5. 扣减库存
+                      boolean success = seckillVoucherService.update()
+                              .setSql("stock = stock - 1")
+                              .eq("voucher_id", voucherId)
+                              .gt("stock", 0)
+                              .update();
+                      if (!success) {
+                          log.error("库存不足");
+                      }
+                      //7. 将订单数据保存到表中
+                      save(voucherOrder);
+                  }
+              }
+          }
+
+        ```
+        - 个人猜测：这里proxy的赋值应该在加入阻塞队列前会严谨一些，因为有可能程序走到了 proxy.createVoucherOrder(voucherOrder);而proxy还未赋值
+      - 秒杀业务总结
+        #image("Screenshot_20250805_214504.png")
+        对于数据安全问题：
+        - 如果刚好一个任务进来，异步从阻塞队列里取出一个任务执行，此时服务宕机，任务就丢失了。
+        - 基于内存保存，如果阻塞队列里还有订单，这时如果服务宕机，信息全都丢失
+- Redis消息队列
+  
+
+        
+
 
