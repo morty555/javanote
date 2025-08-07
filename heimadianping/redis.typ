@@ -1235,8 +1235,207 @@
         - 如果刚好一个任务进来，异步从阻塞队列里取出一个任务执行，此时服务宕机，任务就丢失了。
         - 基于内存保存，如果阻塞队列里还有订单，这时如果服务宕机，信息全都丢失
 - Redis消息队列
+  - 什么是消息队列？字面意思就是存放消息的队列，最简单的消息队列模型包括3个角色 
+    + 消息队列：存储和管理消息，也被称为消息代理（Message Broker）
+    + 生产者：发送消息到消息队列
+    + 消费者：从消息队列获取消息并处理消息
+  - 使用队列的好处在于解耦：举个例子，快递员(生产者)把快递放到驿站/快递柜里去(Message Queue)去，我们(消费者)从快递柜/驿站去拿快递，这就是一个异步，如果耦合，那么快递员必须亲自上楼把快递递到你手里，服务当然好，但是万一我不在家，快递员就得一直等我，浪费了快递员的时间。所以解耦还是非常有必要的
+  - 那么在这种场景下我们的秒杀就变成了：在我们下单之后，利用Redis去进行校验下单的结果，然后在通过队列把消息发送出去，然后在启动一个线程去拿到这个消息，完成解耦，同时也加快我们的响应速度
+  - 这里我们可以直接使用一些现成的(MQ)消息队列，如kafka，rabbitmq等，但是如果没有安装MQ，我们也可以使用Redis提供的MQ方案
+  - 基于List实现消息队列  
+    - 消息队列(Message Queue)，字面意思就是存放消息的队列，而Redis的list数据结构是一个双向链表，很容易模拟出队列的效果
+    - 队列的入口和出口不在同一边，所以我们可以利用：LPUSH结合RPOP或者RPUSH结合LPOP来实现消息队列。
+    - 不过需要注意的是，当队列中没有消息时，RPOP和LPOP操作会返回NULL，而不像JVM阻塞队列那样会阻塞，并等待消息，所以我们这里应该使用BRPOP或者BLPOP来实现阻塞效果。Brpop和rpop的区别就在于阻塞，而且brpop支持多个key,也就是多个列表同时弹出
+    - 基于List的消息队列有哪些优缺点？
+      - 优点：
+        + 利用Redis存储，不受限于JVM内存上限
+        + 基于Redis的持久化机制，数据安全性有保障
+        + 可以满足消息有序性
+      - 缺点：
+        + 无法避免消息丢失(经典服务器宕机)
+        + 只支持单消费者(一个消费者把消息拿走了，其他消费者就看不到这条消息了)
+    - 基于pubsub的消息队列
+      - PubSub(发布订阅)是Redis2.0版本引入的消息传递模型。顾名思义，消费和可以订阅一个或多个channel，生产者向对应channel发送消息后，所有订阅者都能收到相关消息，通过订阅不一样channel来区分收到不同信息
+      - 基于PubSub的消息队列有哪些优缺点 
+        - 优点：
+          + 采用发布订阅模型，支持多生产，多消费
+        - 缺点： 
+          + 不支持数据持久化
+          + 无法避免消息丢失（如果向频道发送了消息，却没有人订阅该频道，那发送的这条消息就丢失了）
+          + 消息堆积有上限，超出时数据丢失（消费者拿到数据的时候处理的太慢，而发送消息发的太快）
+    - 基于stream的消息队列
+      - 注意：当我们指定其实ID为\$时，代表只能读取到最新消息，如果当我们在处理一条消息的过程中，又有超过1条以上的消息到达队列，那么下次获取的时候，也只能获取到最新的一条，会出现漏读消息的问题
+      - STREAM类型消息队列的XREAD命令特点 
+        + 消息可回溯
+        + 一个消息可以被多个消费者读取
+        + 可以阻塞读取
+        + 有漏读消息的风险
+    - 基于stream的消费队列 - 消费者组
+      - 消费者组(Consumer Group)：将多个消费者划分到一个组中，监听同一个队列，具备以下特点 
+        + 消息分流 ： 队列中的消息会分流给组内的不同消费者，而不是重复消费者，从而加快消息处理的速度
+        + 消息标识 ： 消费者会维护一个标识，记录最后一个被处理的消息，哪怕消费者宕机重启，还会从标识之后读取消息，确保每一个消息都会被消费
+        + 消息确认 ： 消费者获取消息后，消息处于pending状态，并存入一个pending-list，当处理完成后，需要通过XACK来确认消息，标记消息为已处理，才会从pending-list中移除（Redis 是内存数据库，Stream 的数据默认存在内存中。如果开启了AOF和RDB,Redis 会将 Stream 的数据、消费者组信息、消费进度等写入磁盘，实现持久化。）
+        - STREAM类型消息队列的XREADGROUP命令的特点 
+          + 消息可回溯
+          + 可以多消费者争抢消息，加快消费速度
+          + 可以阻塞读取
+          + 没有消息漏读风险
+          + 有消息确认机制，保证消息至少被消费一次
+        #image("Screenshot_20250806_152622.png")
+    - Stream消息队列实现异步秒杀下单
+      - 需求
+        + 创建一个Stream类型的消息队列，名为stream.orders
+        + 修改之前的秒杀下单Lua脚本，在认定有抢购资格后，直接向stream.orders中添加消息，内容包含voucherId、userId、orderId
+        + 项目启动时，开启一个线程任务，尝试获取stream.orders中的消息，完成下单
+      - #image("Screenshot_20250806_153252.png")
+      - 因此取出来也是这样的类似json格式，所以需要转换对象。而且因为是count 1 所以只需要get（0），如果count 2,就能拿到两条信息，需要get（0）和get（1）
+      - 消费者组必须创建，消费者若没创建xreadgroup会自动创建
+      ```java 
+              String queueName = "stream.orders";
+
+        private class VoucherOrderHandler implements Runnable {
+
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        //1. 获取队列中的订单信息 XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS stream.orders >
+                        List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream().read(Consumer.from("g1", "c1"),
+                                StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                                //ReadOffset.lastConsumed()底层就是 '>'
+                                StreamOffset.create(queueName, ReadOffset.lastConsumed()));
+                        //2. 判断消息是否获取成功
+                        if (records == null || records.isEmpty()) {
+                            continue;
+                        }
+                        //3. 消息获取成功之后，我们需要将其转为对象
+                        MapRecord<String, Object, Object> record = records.get(0);
+                        Map<Object, Object> values = record.getValue();
+                        VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
+                        //4. 获取成功，执行下单逻辑，将数据保存到数据库中
+                        handleVoucherOrder(voucherOrder);
+                        //5. 手动ACK，SACK stream.orders g1 id
+                        stringRedisTemplate.opsForStream().acknowledge(queueName, "g1", record.getId());
+                    } catch (Exception e) {
+                        log.error("订单处理异常", e);
+                        //订单异常的处理方式我们封装成一个函数，避免代码太臃肿
+                        handlePendingList();
+                    }
+                }
+            }
+        }
+
+        private void handlePendingList() {
+            while (true) {
+                try {
+                    //1. 获取pending-list中的订单信息 XREADGROUP GROUP g1 c1 COUNT 1 BLOCK 2000 STREAMS stream.orders 0
+                    List<MapRecord<String, Object, Object>> records = stringRedisTemplate.opsForStream().read(
+                            Consumer.from("g1", "c1"),
+                            StreamReadOptions.empty().count(1),
+                            StreamOffset.create(queueName, ReadOffset.from("0")));
+                    //2. 判断pending-list中是否有未处理消息
+                    if (records == null || records.isEmpty()) {
+                        //如果没有就说明没有异常消息，直接结束循环
+                        break;
+                    }
+                    //3. 消息获取成功之后，我们需要将其转为对象
+                    MapRecord<String, Object, Object> record = records.get(0);
+                    Map<Object, Object> values = record.getValue();
+                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
+                    //4. 获取成功，执行下单逻辑，将数据保存到数据库中
+                    handleVoucherOrder(voucherOrder);
+                    //5. 手动ACK，SACK stream.orders g1 id
+                    stringRedisTemplate.opsForStream().acknowledge(queueName, "g1", record.getId());
+                } catch (Exception e) {
+                    log.info("处理pending-list异常");
+                    //如果怕异常多次出现，可以在这里休眠一会儿
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+            }
+        }
+        ```   
+- 达人探店
+  - 发布探店笔记
+    - 对应的实体类，数据表中并没有用户头像和用户昵称，但是对应的实体类里却有，这是因为使用了\@TableField(exist = false) 用来解决实体类中有的属性但是数据表中没有的字段
+  - 查看探店笔记
+  - 点赞功能
+    - 修改点赞功能，利用Redis中的set集合来判断是否点赞过，未点赞则点赞数+1，已点赞则点赞数-1
+    - 如果当前用户未点赞，则点赞数 +1，同时将用户加入set集合
+    - 如果当前用户已点赞，则点赞-1，将用户从set集合中移除
+    - 修改完毕之后，页面上还不能立即显示点赞完毕的后果，因为上面的步骤只是修改redis中的数据，我们还需要修改查询Blog业务，判断Blog是否被当前用户点赞过
+  - 点赞排行榜
+    #image("Screenshot_20250806_221646.png")
+    - 这里使用sortedSet按点赞顺序排序，其实就是把zset中的元素取出来它们的id,然后用id拿到数据库去查，并让sql按照我们查到的数据去返回。因为redis的zset返回的是按点赞顺序的，但是sql语句查询出来的不是。`select * from tb_user where id in (ids[0], ids[1] ...) order by field(id, ids[0], ids[1] ...)`
+    - 同时我们需要修改BlogServiceImpl
+
+      由于ZSet没有isMember方法，所以这里只能通过查询score来判断集合中是否有该元素，如果有该元素，则返回值是对应的score，如果没有该元素，则返回值为null
+    - 同时修改isBlogLiked方法，在原有逻辑上，判断用户是否已登录，登录状态下才会继续判断用户是否点赞
+  - 好友关注
+    - 关注和取消关注
+    - 共同关注
+      - 实现方式当然是我们之前学过的set集合，在set集合中，有交集并集补集的api，可以把二者关注的人放入到set集合中，然后通过api查询两个set集合的交集
+      - 那我们就得先修改我们之前的关注逻辑，在关注博主的同时，需要将数据放到set集合中，方便后期我们实现共同关注，当取消关注时，也需要将数据从set集合中删除
+      - 对当前用户和博主用户的关注列表取交集，将结果转为list，之后根据ids去查询共同关注的用户，封装成UserDto再返回
+    - Feed流
+      - 关注了用户之后，这个用户发布了动态，那我们应该把这些数据推送给用户，这个需求，我们又称其为Feed流，关注推送也叫作Feed流，直译为投喂，为用户提供沉浸式体验，通过无限下拉刷新获取新的信息
+      - 对于传统的模式内容检索：用户需要主动通过搜索引擎或者是其他方式去查找想看的内容
+      - 对于新型Feed流的效果：系统分析用户到底想看什么，然后直接把内容推送给用户，从而使用户能更加节约时间，不用去主动搜素
+      - Feed流的实现有两种模式 
+        + Timeline：不做内容筛选，简单的按照内容发布时间排序，常用于好友或关注(B站关注的up，朋友圈等) 
+          - 优点：信息全面，不会有缺失，并且实现也相对简单
+          - 缺点：信息噪音较多，用户不一定感兴趣，内容获取效率低
+        + 智能排序：利用智能算法屏蔽掉违规的、用户不感兴趣的内容，推送用户感兴趣的信息来吸引用户 
+          - 优点：投喂用户感兴趣的信息，用户粘度很高，容易沉迷
+          - 缺点：如果算法不精准，可能会起到反作用（给你推的你都不爱看）
+        - 采用Timeline模式，有三种具体的实现方案 
+          + 拉模式：也叫读扩散 
+            - 该模式的核心含义是：当张三和李四、王五发了消息之后，都会保存到自己的发件箱中，如果赵六要读取消息，那么他会读取他自己的收件箱，此时系统会从他关注的人群中，将他关注人的信息全都进行拉取，然后进行排序
+            - 优点：比较节约空间，因为赵六在读取信息时，并没有重复读取，并且读取完之后，可以将他的收件箱清除
+            - 缺点：有延迟，当用户读取数据时，才会去关注的人的时发件箱中拉取信息，假设该用户关注了海量用户，那么此时就会拉取很多信息，对服务器压力巨大
+          + 推模式：也叫写扩散
+            - 推模式是没有写邮箱的，当张三写了一个内容，此时会主动把张三写的内容发送到它粉丝的收件箱中，假设此时李四再来读取，就不用再去临时拉取了
+            - 优点：时效快，不用临时拉取
+            - 缺点：内存压力大，假设一个大V发了一个动态，很多人关注他，那么就会写很多份数据到粉丝那边去
+          + 推拉结合：页脚读写混合，兼具推和拉两种模式的优点
+            - 推拉模式是一个折中的方案，站在发件人这一边，如果是普通人，那么我们采用写扩散的方式，直接把数据写入到他的粉丝收件箱中，因为普通人的粉丝数量较少，所以这样不会产生太大压力。但如果是大V，那么他是直接将数据写入一份到发件箱中去，在直接写一份到活跃粉丝的收件箱中，站在收件人这边来看，如果是活跃粉丝，那么大V和普通人发的都会写到自己的收件箱里，但如果是普通粉丝，由于上线不是很频繁，所以等他们上线的时候，再从发件箱中去拉取信息。
+        - feed流的分页模式
+          - 假设在t1时刻，我们取读取第一页，此时page = 1，size = 5，那么我们拿到的就是10~6这几条记录，假设t2时刻有发布了一条新纪录，那么在t3时刻，我们来读取第二页，此时page = 2，size = 5，那么此时读取的数据是从6开始的，读到的是6~2，那么我们就读到了重复的数据，所以我们要使用Feed流的分页，不能使用传统的分页
+          - 滚动分页：
+            我们需要记录每次操作的最后一条，然后从这个位置去开始读数据
+
+            举个例子：我们从t1时刻开始，拿到第一页数据，拿到了10~6，然后记录下当前最后一次读取的记录，就是6，t2时刻发布了新纪录，此时这个11在最上面，但不会影响我们之前拿到的6，此时t3时刻来读取第二页，第二页读数据的时候，从6-1=5开始读，这样就拿到了5~1的记录。我们在这个地方可以使用SortedSet来做，使用时间戳来充当表中的1~10
+          - 实现分页查询收件箱：
+            + 每次查询完成之后，我们要分析出查询出的最小时间戳，这个值会作为下一次的查询条件
+            + 我们需要找到与上一次查询相同的查询个数，并作为偏移量，下次查询的时候，跳过这些查询过的数据，拿到我们需要的数据（例如时间戳8 6 6 5 5 4，我们每次查询3个，第一次是8 6 6，此时最小时间戳是6，如果不设置偏移量，会从第一个6之后开始查询，那么查询到的就是6 5 5，而不是5 5 4，如果这里说的不清楚，那就看后续的代码）
+            - 综上：我们的请求参数中需要携带lastId和offset，即上一次查询时的最小时间戳和偏移量，这两个参数。分页查询的思路其实就是每次记录最后的那个时间戳，然后记录相同时间戳在上一次查了有多少个（设为n），下次查的时候就直接用这个时间戳开始往后数n个开始查
+- 附近商户
+  - Redis在3.2版本中加入了对GEO的支持，允许存储地理坐标信息
+  - GEODIST 命令在计算距离时会假设地球为完美的球形， 在极限情况下， 这⼀假设最⼤会造成 0.5% 的误差
+    - 返回值：计算出的距离会以双精度浮点数的形式被返回。 如果给定的位置元素不存在， 那么命令返回空值
+  - 具体实现思路就是将商铺所在位置存入redis, 查询redis、按照距离排序、分页; 结果：shopId、distance
+
+    GEOSEARCH key FROMLONLAT x y BYRADIUS 5000 m WITHDIST
+
+    如果不需要根据距离查询就直接返回shop,如果需要就查出来距离后放入shop的list中再返回
+- 签到功能
+  - 我们可以把年和月作为BitMap的key，然后保存到一个BitMap中，每次签到就把对应位上的0变成1，只要是1就说明这一天已经签到了，反之则没有签到
+  - BitMap底层是基于String数据结构，因此其操作也都封装在字符串相关操作中
+  #image("Screenshot_20250807_095731.png")
+  -  获取截止至今日的签到记录  BITFIELD key GET uDay 0
+- UV统计
+  - UV：全称Unique Visitor，也叫独立访客量，是指通过互联网访问、浏览这个网页的自然人。1天内同一个用户多次访问该网站，只记录1次。
+  - PV：全称Page View，也叫页面访问量或点击量，用户每访问网站的一个页面，记录1次PV，用户多次打开页面，则记录多次PV。往往用来衡量网站的流量。
+  - UV统计在服务端做会很麻烦，因为要判断该用户是否已经统计过了，需要将统计过的信息保存，但是如果每个访问的用户都保存到Redis中，那么数据库会非常恐怖，那么该如何处理呢？
+  - HyperLogLog(HLL)是从Loglog算法派生的概率算法，用户确定非常大的集合基数，而不需要存储其所有值
+  - Redis中的HLL是基于string结构实现的，单个HLL的内存永远小于16kb，内存占用低的令人发指！作为代价，其测量结果是概率性的，有小于0.81％的误差。不过对于UV统计来说，这完全可以忽略。
   
 
-        
+
+
+
 
 
