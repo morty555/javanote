@@ -172,4 +172,37 @@
     - #image("Screenshot_20250815_223907.png")
     - #image("Screenshot_20250815_224119.png")
     - springboot扫描包范围只在启动类所在目录，而feign提出后不在这里，所以需要配置
+- gateway网关
+  - 网关功能
+    - 身份认证和权限校验
+    - 服务路由，负载均衡
+    - 请求限流
+  - 实现有两种
+    - gateway
+    - zuul
+    - zuul基于servlet，属于阻塞式编程。而gateway是webflux，是响应式编程，具备更好的性能
+  - 搭建网关
+    - 引入依赖
+    - 编写路由配置以及nacos地址
+    #image("Screenshot_20250816_221539.png")
+  - 路由断言
+    - 路由断言工厂
+      - 读取用户定义的断言规则
+  - 路由过滤器
+    - 对请求和响应做处理
+    - 配置在路由下的过滤器只对该路由生效
+    - 默认过滤器
+      - 对所有请求过滤
+  - 全局过滤器
+    - gatewayfilter通过配置定义，globalfilter的逻辑需要自己写代码实现
+    #image("Screenshot_20250816_223543.png")
+  - 过滤器执行顺序
+    - globalfilter适配器模式
+    - 执行顺序
+      - order越小优先级越高
+      - globalfilter指定order值
+      - 路由过滤器和defaultfilter的order由spring指定，默认按声明顺序由1递增
+      - order一样时，defaultfilter>路由过滤器>globalfilter
+  - 跨域问题
+    - CORS
     
