@@ -205,4 +205,6 @@
       - order一样时，defaultfilter>路由过滤器>globalfilter
   - 跨域问题
     - CORS
+    - Options请求被拦截问题
+    - 跨越检测有效期
     
