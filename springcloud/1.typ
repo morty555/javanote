@@ -150,4 +150,26 @@
   - 网络
     - 加入自定义网络的容器才可以通过容器名互相访问（默认网络不可以）
     - 如果在创建容器时指定了网桥，就不会再进入默认的
-
+- Feign
+  - resttemplate难以维护
+  - Feign是一个声明式的http客户端
+  - 负载均衡集成ribbon
+  - 配置
+    + 日志级别
+    + 响应结果的解析器
+    + 请求参数编码
+    + 支持的注解格式
+    + 失败重试机制
+  - 性能优化
+    - 底层的客户端实现
+      - URLConnection：默认实现，不支持连接池
+      - Apache httpclient：支持连接池
+      - OKhttp
+    - 优化Feign的性能
+      + 使用连接池代替默认的URLConnection
+      + 日志级别最好用basic或none
+  - 最佳实践
+    - #image("Screenshot_20250815_223907.png")
+    - #image("Screenshot_20250815_224119.png")
+    - springboot扫描包范围只在启动类所在目录，而feign提出后不在这里，所以需要配置
+    

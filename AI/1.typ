@@ -11,3 +11,69 @@
   - 大模型本身无记忆功能，我们如果要让大模型有记忆功能需携带上一次问题的参数
   - 流式生成是一点点生成，非流式是一次性返回所有内容
   - 响应数据
+- langchain4j
+  - 会话功能
+    - 快速入门
+      + 引入依赖
+      + 构建openaichatmodel对象
+        - url在平台有提供
+        - apiKey不要写死，配置在环境变量中（要先配好再打开idea）
+        - modelname
+      + 调用chat方法
+      + 打印日志信息
+        - 引入logback依赖
+        - logrequest和logresponse设为true
+    - spring整合langchain4j
+      - 创建springboot项目
+      - 引入起步依赖
+      - application.yml配置大模型
+    - aiservices工具类
+      - 引入依赖
+      - 声明接口
+      - 在配置类使用aiservices为接口创建代理对象
+      - 在controller中注入并使用
+      （以上是springioc注入的很好例子）
+      - 声明式使用
+    - 流式调用
+      - 引入依赖
+      - 配置流式模型对象
+      - 切换接口中方法的返回值类型
+      - 修改controller代码，produces指定编码格式
+    - 前端对接 
+      - 在static里放入html
+    - 消息注解
+      - systemmessage
+      - usermessage
+    - 会话记忆
+      - 定义会话记忆对象
+      - 配置会话记忆对象
+    - 会话记忆隔离
+      - 定义会话记忆对象提供者
+      - 配置会话记忆对象提供者
+      - consultantservice接口方法中添加memoryId
+      - controller中chat接口接受memoryId
+      - 前端页面请求时传递memoryId
+    - 会话记忆持久化
+      - redis实现（可选用docker）
+      - 提供chatmemorystore实现类
+      -配置chatmemorstore
+- RAG
+  + 存储
+    - 引入依赖
+    - 加载知识文档
+    - 构造向量数据库操作对象
+    - 把文档切割，向量化并存储到向量数据库中
+  + 检索
+    - 构建向量数据库检索对象
+    - 配置向量数据库检索对象 
+  + 注意： embeddingStore的对象会通过依赖自动注入，我在创建embeddingstore时不能重名
+  #image("Screenshot_20250815_110054.png")
+  - 文档加载器
+  - 文档解析器
+  - 文档分割器
+  - 向量模型
+  - 向量数据库
+  - 模型限制行数
+  - 后续注释\@bean防止每次初始化程序重复放入数据库
+- tools工具
+  
