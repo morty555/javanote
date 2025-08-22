@@ -1,0 +1,10 @@
+- ARMS系统监控
+  - 阿里云
+  - 探针技术 javaagent 在java应用启动时或运行时动态修改字节码 无侵入式监控
+  - prometheus+Grafana
+    - prometheus
+      - 时序数据库 拉取模式 
+      - 指标类型
+      - 内存 预写日志 持久化到硬盘
+    - Grafana
+      - 数据可视化
