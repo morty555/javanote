@@ -239,5 +239,7 @@
       + 利用channel声明队列
       + 定义consumer的消费行为
       + 利用channel将消费者与队列绑定
-- springAMOP
-  - 
+- springAMQP
+  - AMQP，应用程序传递业务消息的开发标准，该协议与语言和平台无关
+  - （暂时跳过，要用再学）
+- ES
