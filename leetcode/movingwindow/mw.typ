@@ -30,3 +30,95 @@
     }
 }
   ```
++ 找到字符串中所有字母异位词
+  - 基础滑动窗口
+  ```java 
+  class Solution {
+    public List<Integer> findAnagrams(String s, String p) {
+       int slength = s.length();
+       int plength = p.length();
+
+       if(slength<plength){
+        return new ArrayList<Integer>();
+       }
+       int[] scount = new int[26];
+       int[] pcount = new int[26];
+       List<Integer> ans = new ArrayList<>();
+       for(int i = 0;i<plength;i++){
+          ++scount[s.charAt(i)-'a'];
+          ++pcount[p.charAt(i)-'a'];
+       }
+       if(Arrays.equals(scount,pcount)){
+          ans.add(0);
+       }
+       for(int i = 0;i<slength-plength;i++){
+          --scount[s.charAt(i)-'a'];
+          ++scount[s.charAt(i+plength)-'a'];
+          if(Arrays.equals(scount,pcount)){
+            ans.add(i+1);
+          }
+          
+       }
+           return ans;
+    }
+}
+  ``` 
+    - 用数组记录窗口内字母出现频率
+    - 数组索引与字母对应
+    - 比较频率数组是否相同来比较窗口内异位词是否相同
+    - 窗口指针在字符串移动，把左指针对应的值从频率数组移去，把右指针移入
+  - 优化滑动窗口
+    - 用differ记录两个字符串中不一样单词的频率
+    - 可优化一个频率数组的空间
+          ```java
+      class Solution {
+    public List<Integer> findAnagrams(String s, String p) {
+        int sLen = s.length(), pLen = p.length();
+
+        if (sLen < pLen) {
+            return new ArrayList<Integer>();
+        }
+
+        List<Integer> ans = new ArrayList<Integer>();
+        int[] count = new int[26];
+        for (int i = 0; i < pLen; ++i) {
+            ++count[s.charAt(i) - 'a'];
+            --count[p.charAt(i) - 'a'];
+        }
+
+        int differ = 0;
+        for (int j = 0; j < 26; ++j) {
+            if (count[j] != 0) {
+                ++differ;
+            }
+        }
+
+        if (differ == 0) {
+            ans.add(0);
+        }
+
+        for (int i = 0; i < sLen - pLen; ++i) {
+            if (count[s.charAt(i) - 'a'] == 1) {  // 窗口中字母 s[i] 的数量与字符串 p 中的数量从不同变得相同
+                --differ;
+            } else if (count[s.charAt(i) - 'a'] == 0) {  // 窗口中字母 s[i] 的数量与字符串 p 中的数量从相同变得不同
+                ++differ;
+            }
+            --count[s.charAt(i) - 'a'];
+
+            if (count[s.charAt(i + pLen) - 'a'] == -1) {  // 窗口中字母 s[i+pLen] 的数量与字符串 p 中的数量从不同变得相同
+                --differ;
+            } else if (count[s.charAt(i + pLen) - 'a'] == 0) {  // 窗口中字母 s[i+pLen] 的数量与字符串 p 中的数量从相同变得不同
+                ++differ;
+            }
+            ++count[s.charAt(i + pLen) - 'a'];
+            
+            if (differ == 0) {
+                ans.add(i + 1);
+            }
+        }
+
+        return ans;
+    }
+}
+      ```
+      - 这里的differ指的是字母频率不同的个数，当窗口移动的时候，根据移出的左边界和移入的右边界分别判断differ加减，如果differ为0则为异位词
