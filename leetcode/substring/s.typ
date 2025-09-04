@@ -82,4 +82,63 @@
 
     ```
     - 单调队列
+
+
+
+- 最小覆盖子串
+  #image("Screenshot_20250904_103909.png")
+  ```java
+  class Solution {
+    Map<Character, Integer> ori = new HashMap<Character, Integer>();
+    Map<Character, Integer> cnt = new HashMap<Character, Integer>();
+
+    public String minWindow(String s, String t) {
+        int tLen = t.length();
+        for (int i = 0; i < tLen; i++) {
+            char c = t.charAt(i);
+            ori.put(c, ori.getOrDefault(c, 0) + 1);
+        }
+        int l = 0, r = -1;
+        int len = Integer.MAX_VALUE, ansL = -1, ansR = -1;
+        int sLen = s.length();
+        while (r < sLen) {
+            ++r;
+            if (r < sLen && ori.containsKey(s.charAt(r))) {
+                cnt.put(s.charAt(r), cnt.getOrDefault(s.charAt(r), 0) + 1);
+            }
+            while (check() && l <= r) {
+                if (r - l + 1 < len) {
+                    len = r - l + 1;
+                    ansL = l;
+                    ansR = l + len;
+                }
+                if (ori.containsKey(s.charAt(l))) {
+                    cnt.put(s.charAt(l), cnt.getOrDefault(s.charAt(l), 0) - 1);
+                }
+                ++l;
+            }
+        }
+        return ansL == -1 ? "" : s.substring(ansL, ansR);
+    }
+
+    public boolean check() {
+        Iterator iter = ori.entrySet().iterator(); 
+        while (iter.hasNext()) { 
+            Map.Entry entry = (Map.Entry) iter.next(); 
+            Character key = (Character) entry.getKey(); 
+            Integer val = (Integer) entry.getValue(); 
+            if (cnt.getOrDefault(key, 0) < val) {
+                return false;
+            }
+        } 
+        return true;
+    }
+}
+
+  ```
+  - check函数有问题
+  - 双哈希表记录目标串和滑动窗口内的字符和频率
+  - 先初始化目标串的哈希表
+  - 然后从子串最左端开始，移动窗口右端，直到找到符合目标串的子串（判断条件就是看子串哈希表每个字符的频率是否大于等于目标串的频率）
+  - 然后while循环将窗口左端向右移动，判断子串哈希表的频率是否大于滑动窗口的频率，直到子串频率大于滑动窗口停止，此时子串最短
   
