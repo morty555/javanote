@@ -305,6 +305,48 @@ class BlockingQueueExample {
         -     AtomicReference：原子引用类，用于对对象引用进行原子操作。可以保证在多线程环境下，对对象的更新操作是原子性的，即要么全部成功，要么全部失败，不会出现数据不一致的情况。常用于实现无锁数据结构或需要对对象进行原子更新的场景。
         #image("Screenshot_20250904_204656.png")
     - 怎么保证多线程安全？
+      - synchronized关键字:可以使用synchronized关键字来同步代码块或方法，确保同一时刻只有一个线程可以访问这些代码。对象锁是通过synchronized关键字锁定对象的监视器（monitor）来实现的。
+      - volatile关键字:volatile关键字用于变量，确保所有线程看到的是该变量的最新值，而不是可能存储在本地寄存器中的副本。
+      - Lock接口和ReentrantLock类:java.util.concurrent.locks.Lock接口提供了比synchronized更强大的锁定机制，ReentrantLock是一个实现该接口的例子，提供了更灵活的锁管理和更高的性能。
+      - 原子类：Java并发库（java.util.concurrent.atomic）提供了原子类，如AtomicInteger、AtomicLong等，这些类提供了原子操作，可以用于更新基本类型的变量而无需额外的同步。
+      - 线程局部变量:ThreadLocal类可以为每个线程提供独立的变量副本，这样每个线程都拥有自己的变量，消除了竞争条件。
+      - 并发集合:使用java.util.concurrent包中的线程安全集合，如ConcurrentHashMap、ConcurrentLinkedQueue等，这些集合内部已经实现了线程安全的逻辑。
+      - JUC工具类: 使用java.util.concurrent包中的一些工具类可以用于控制线程间的同步和协作。例如：Semaphore和CyclicBarrier等。
+    - Java中有哪些常用的锁，在什么场景下使用？
+      - 内置锁（synchronized）：Java中的synchronized关键字是内置锁机制的基础，可以用于方法或代码块。当一个线程进入synchronized代码块或方法时，它会获取关联对象的锁；当线程离开该代码块或方法时，锁会被释放。如果其他线程尝试获取同一个对象的锁，它们将被阻塞，直到锁被释放。其中，syncronized加锁时有无锁、偏向锁、轻量级锁和重量级锁几个级别。偏向锁用于当一个线程进入同步块时，如果没有任何其他线程竞争，就会使用偏向锁，以减少锁的开销。轻量级锁使用线程栈上的数据结构，避免了操作系统级别的锁。重量级锁则涉及操作系统级的互斥锁。
+      - ReentrantLock：java.util.concurrent.locks.ReentrantLock是一个显式的锁类，提供了比synchronized更高级的功能，如可中断的锁等待、定时锁等待、公平锁选项等。ReentrantLock使用lock()和unlock()方法来获取和释放锁。其中，公平锁按照线程请求锁的顺序来分配锁，保证了锁分配的公平性，但可能增加锁的等待时间。非公平锁不保证锁分配的顺序，可以减少锁的竞争，提高性能，但可能造成某些线程的饥饿。
+      - 读写锁（ReadWriteLock）：java.util.concurrent.locks.ReadWriteLock接口定义了一种锁，允许多个读取者同时访问共享资源，但只允许一个写入者。读写锁通常用于读取远多于写入的情况，以提高并发性。
+      - 乐观锁和悲观锁：悲观锁（Pessimistic Locking）通常指在访问数据前就锁定资源，假设最坏的情况，即数据很可能被其他线程修改。synchronized和ReentrantLock都是悲观锁的例子。乐观锁（Optimistic Locking）通常不锁定资源，而是在更新数据时检查数据是否已被其他线程修改。乐观锁常使用版本号或时间戳来实现。
+      - 自旋锁：自旋锁是一种锁机制，线程在等待锁时会持续循环检查锁是否可用，而不是放弃CPU并阻塞。通常可以使用CAS来实现。这在锁等待时间很短的情况下可以提高性能，但过度自旋会浪费CPU资源。
+    - 怎么在实践中用锁的？
+      - synchronized
+        #image("Screenshot_20250906_111536.png")
+      - 使用Lock接口
+        #image("Screenshot_20250906_112005.png")
+        #image("Screenshot_20250906_112325.png")
+      - 使用ReadWriteLock
+        #image("Screenshot_20250906_112559.png")
+    - Java 并发工具你知道哪些？
+      - CountDownLatch：CountDownLatch 是一个同步辅助类，它允许一个或多个线程等待其他线程完成操作。它使用一个计数器进行初始化，调用 countDown() 方法会使计数器减一，当计数器的值减为 0 时，等待的线程会被唤醒。可以把它想象成一个倒计时器，当倒计时结束（计数器为 0）时，等待的事件就会发生。示例代码：
+      #image("Screenshot_20250906_123407.png")
+      - CyclicBarrier：CyclicBarrier 允许一组线程互相等待，直到到达一个公共的屏障点。当所有线程都到达这个屏障点后，它们可以继续执行后续操作，并且这个屏障可以被重置循环使用。与 CountDownLatch 不同，CyclicBarrier 侧重于线程间的相互等待，而不是等待某些操作完成。示例代码：
+      #image("Screenshot_20250906_123708.png")
+      #image("Screenshot_20250906_123656.png")
+      - Semaphore：Semaphore 是一个计数信号量，用于控制同时访问某个共享资源的线程数量。通过 acquire() 方法获取许可，使用 release() 方法释放许可。如果没有许可可用，线程将被阻塞，直到有许可被释放。可以用来限制对某些资源（如数据库连接池、文件操作等）的并发访问量。代码如下：
+      #image("Screenshot_20250906_123737.png")
+      - Future 和 Callable：Callable 是一个类似于 Runnable 的接口，但它可以返回结果，并且可以抛出异常。Future 用于表示一个异步计算的结果，可以通过它来获取 Callable 任务的执行结果或取消任务。代码如下：
+      #image("Screenshot_20250906_124206.png")
+      - ConcurrentHashMap：ConcurrentHashMap 是一个线程安全的哈希表，它允许多个线程同时进行读操作，在一定程度上支持并发的修改操作，避免了 HashMap 在多线程环境下需要使用 synchronized 或 Collections.synchronizedMap() 进行同步的性能问题。代码如下：
+      #image("Screenshot_20250906_124336.png")
+    - CountDownLatch 是做什么的讲一讲？
+      - CountDownLatch 是 Java 并发包（java.util.concurrent）中的一个同步工具类，用于让一个或多个线程等待其他线程完成操作后再继续执行。
+      - 其核心是通过一个计数器（Counter）实现线程间的协调，常用于多线程任务的分阶段控制或主线程等待多个子线程就绪的场景，核心原理：
+        - 初始化计数器：创建 CountDownLatch 时指定一个初始计数值（如 N）。
+        - 等待线程阻塞：调用 await() 的线程会被阻塞，直到计数器变为 0。
+        - 任务完成通知：其他线程完成任务后调用 countDown()，使计数器减 1。
+        - 唤醒等待线程：当计数器减到 0 时，所有等待的线程会被唤醒。
+    -  synchronized和reentrantlock及其应用场景？
+      - 
   - 线程池
     - 介绍一下线程池的原理
       - 线程池是为了减少频繁的创建线程和销毁线程带来的性能损耗，线程池的工作原理如下图：
