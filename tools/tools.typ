@@ -27,3 +27,10 @@
   #image("Screenshot_20250823_101851.png")
   #image("Screenshot_20250823_101923.png")
   #image("Screenshot_20250823_101931.png")
+- DSTransactional注解
+  - 多数据源分布式事务
+  - 应用于一个方法同时操作两个库
+  - 如果是 跨服务的分布式事务，则需要引入 Seata、RocketMQ 事务消息 等方案，DSTransactional 只适合 单应用多数据源 的场景。
+- minio
+- Sa-token
+- snailjob
