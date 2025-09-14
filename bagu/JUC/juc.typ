@@ -632,6 +632,143 @@ class BlockingQueueExample {
   - 场景
     - 多线程打印奇偶数，怎么控制打印的顺序
       - 可以利用wait()和notify()来控制线程的执行顺序。
+      ```java 
+      public class PrintOddEven {
+    private static final Object lock = new Object();
+    private static int count = 1;
+    private static final int MAX_COUNT = 10;
+
+    public static void main(String[] args) {
+        Runnable printOdd = () -> {
+            synchronized (lock) {
+                while (count <= MAX_COUNT) {
+                    if (count % 2 != 0) {
+                        System.out.println(Thread.currentThread().getName() + ": " + count++);
+                        lock.notify();
+                    } else {
+                        try {
+                            lock.wait();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        };
+
+        Runnable printEven = () -> {
+            synchronized (lock) {
+                while (count <= MAX_COUNT) {
+                    if (count % 2 == 0) {
+                        System.out.println(Thread.currentThread().getName() + ": " + count++);
+                        lock.notify();
+                    } else {
+                        try {
+                            lock.wait();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        };
+
+        Thread oddThread = new Thread(printOdd, "OddThread");
+        Thread evenThread = new Thread(printEven, "EvenThread");
+
+        oddThread.start();
+        evenThread.start();
+    }
+}
+
+      ```
+      - 在上面的示例中，通过一个共享的锁对象lock来控制两个线程的交替执行。一个线程负责打印奇数，另一个线程负责打印偶数，通过wait()和notify()方法来在两个线程之间实现顺序控制。当当前应该打印奇数时，偶数线程会进入等待状态，反之亦然。
+      - lock对象只能有一个线程持有，即使是两个代码块，也只能进入其中一个，因为lock对象是同一个
+      - wait会释放并挂起锁，因此whinle判断到不符合条件时，线程会进入等待状态，并释放锁，让另一个线程有机会获取锁并执行。
+      - notify会唤醒一个等待的线程，但不会释放锁，只有当前线程执行完同步代码块并释放锁后，唤醒的线程才能继续执行。
+    - 创建 3 个并发执行的线程，在每个线程的任务结束时调用 countDown 方法将计数器减 1。
+    - 创建第 4 个线程，使用 await 方法等待计数器为 0，即等待其他 3 个线程完成任务。
+    ```java
+    import java.util.concurrent.CountDownLatch;
+
+public class CountDownLatchExample {
+    public static void main(String[] args) {
+        // 创建一个 CountDownLatch，初始计数为 3
+        CountDownLatch latch = new CountDownLatch(3);
+
+        // 创建并启动 3 个并发线程
+        for (int i = 0; i < 3; i++) {
+            final int threadNumber = i + 1;
+            new Thread(() -> {
+                try {
+                    System.out.println("Thread " + threadNumber + " is working.");
+                    // 模拟线程执行任务
+                    Thread.sleep((long) (Math.random() * 1000));
+                    System.out.println("Thread " + threadNumber + " has finished.");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    // 任务完成后，计数器减 1
+                    latch.countDown();
+                }
+            }).start();
+        }
+
+        // 创建并启动第 4 个线程，等待其他 3 个线程完成
+        new Thread(() -> {
+            try {
+                System.out.println("Waiting for other threads to finish.");
+                // 等待计数器为 0
+                latch.await();
+                System.out.println("All threads have finished, this thread starts to work.");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+}
+ 
+    ```
+  - 3个线程并发执行，1个线程等待这三个线程全部执行完在执行，怎么实现？
+    - 首先，创建了一个 CountDownLatch 对象 latch，并将其初始计数设置为 3。
+    - 然后，使用 for 循环创建并启动 3 个线程。每个线程会执行一些工作（这里使用 Thread.sleep 模拟），在工作完成后，会调用 latch.countDown() 方法，将 latch 的计数减 1。
+    - 最后，创建第 4 个线程。这个线程在开始时调用 latch.await() 方法，它会阻塞，直到 latch 的计数为 0，即前面 3 个线程都调用了 countDown() 方法。一旦计数为 0，该线程将继续执行后续任务。
+  - 单例模型既然已经用了synchronized，为什么还要在加volatile？
+    - 使用 synchronized 和 volatile 一起，可以创建一个既线程安全又能正确初始化的单例模式，避免了多线程环境下的各种潜在问题。这是一种比较完善的线程安全的单例模式实现方式，尤其适用于高并发环境。
+    ```java
+    public class Singleton {
+    private static volatile Singleton instance;
+
+    private Singleton() {}
+
+    public static Singleton getInstance() {
+        if (instance == null) {
+            synchronized (Singleton.class) {
+                if (instance == null) {
+                    instance = new Singleton();
+                }
+            }
+        }
+        return instance;
+    }
+}
+    ```
+    - synchronized 关键字的作用用于确保在多线程环境下，只有一个线程能够进入同步块（这里是 synchronized (Singleton.class)）。在创建单例对象时，通过 synchronized 保证了创建过程的线程安全性，避免多个线程同时创建多个单例对象。
+    - volatile 确保了对象引用的可见性和创建过程的有序性，避免了由于指令重排序而导致的错误。
+    - instance = new Singleton(); 这行代码并不是一个原子操作，它实际上可以分解为以下几个步骤：
+      - 分配内存空间。
+      - 实例化对象。
+      - 将对象引用赋值给 instance。
+    - 由于 Java 内存模型允许编译器和处理器对指令进行重排序，在没有 volatile 的情况下，可能会出现重排序，例如先将对象引用赋值给 instance，但对象的实例化操作尚未完成。
+    - 这样，其他线程在检查 instance == null 时，会认为单例已经创建，从而得到一个未完全初始化的对象，导致错误。
+    - volatile 可以保证变量的可见性和禁止指令重排序。它确保对 instance 的修改对所有线程都是可见的，并且保证了上述三个步骤按顺序执行，避免了在单例创建过程中因指令重排序而导致的问题。
+    #image("Screenshot_20250913_104757.png")
+    #image("Screenshot_20250913_105811.png")
+    #image("Screenshot_20250913_105834.png")
+  - 假设两个线程并发读写同一个整型变量，初始值为零，每个线程加 50 次，结果可能是什么？
+    - 在没有任何同步机制的情况下，两个线程并发对同一个整型变量进行 50 次加 1 操作，最终结果可能是 100，也可能小于 100，最坏的结果是 50，也就是最终的结果可能是在 [50, 100] 。
+    - 小于 100 情况的分析，由于对整型变量的 num++ 操作不是原子操作，它实际上包含了三个步骤：读取变量的值、将值加 1、将新值写回变量。在多线程环境下，可能会出现线程安全问题。例如，线程 1 和线程 2 同时读取了变量的当前值，然后各自将其加 1，最后都将相同的新值写回变量，这就导致了一次加 1 操作的丢失。这种情况会多次发生，最终结果就会小于 100。
+    - 通过 synchronized 关键字或 ReentrantLock 确保操作的互斥性
       
 
 
