@@ -183,3 +183,29 @@
     - 重点
       - 反转数组的写法
       - 注意k取模
+- 除自身外数组的乘积
+#image("Screenshot_20250917_153114.png")
+  - 左右数组乘积
+    - 只用一个结果数组存储
+    - 两次遍历
+      - 第一次遍历计算每个位置的左数组的乘积，存储到结果数组
+      - 第二次遍历在结果数组的基础上，从尾部遍历乘上右数组的乘积
+      ```java
+      class Solution {
+    public int[] productExceptSelf(int[] nums) {
+        int length = nums.length;
+        int[] ans = new int[length];
+        ans[0]=1;
+        for(int i =1;i<length;i++){
+           ans[i]=ans[i-1]*nums[i-1];
+        }
+        int R = 1;
+        for(int i = length-1;i>=0;i--){
+            ans[i]=ans[i]*R;
+            R = R*nums[i];
+        }
+        return ans;
+    }
+} 
+      ```
+    

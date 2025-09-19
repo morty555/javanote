@@ -276,6 +276,277 @@ public class UserService {
       - 服务端 Controller 控制器接收到请求后对请求进行解析，找到相应的Model，对用户请求进行处理Model 处理；
       - 将处理结果再交给 Controller（控制器其实只是起到了承上启下的作用）；
       - 根据处理结果找到要作为向客户端发回的响应View 页面，页面经渲染后发送给客户端。
+  - 了解SpringMVC的处理流程吗？
+    - 用户发送请求至前端控制器DispatcherServlet
+      - 即浏览器输入url
+      - 请求发送到web服务器如tomcat
+    - DispatcherServlet收到请求调用处理器映射器HandlerMapping。
+      - Tomcat 收到请求后，会交给 Spring MVC 的核心组件 DispatcherServlet。
+      - 它的作用就是整个 MVC 框架的“总指挥”，协调后续流程。
+      - DispatcherServlet 不知道该找哪个 Controller，于是会问 HandlerMapping。
+    - 处理器映射器根据请求url找到具体的处理器，生成处理器执行链HandlerExecutionChain(包括处理器对象和处理器拦截器)一并返回给DispatcherServlet。
+      - HandlerMapping 的任务就是：
+        - 看一下请求 URL，比如 /user/list
+        - 找到对应的 Controller 方法。
+        -  HandlerExecutionChain（处理器执行链）
+          - 找到处理器后，还会顺便打包上拦截器（HandlerInterceptor）。
+          - 比如你定义了登录拦截器，它会被插入到执行链里。
+    - DispatcherServlet根据处理器Handler获取处理器适配器HandlerAdapter执行HandlerAdapter处理一系列的操作，如：参数封装，数据格式转换，数据验证等操作
+      - HandlerAdapter（处理器适配器）
+        - DispatcherServlet 还不知道怎么调用 Controller（不同类型的 Controller 写法不同）。
+        - 于是交给 HandlerAdapter 来处理：
+          - 参数封装（请求里的参数转成方法参数，比如 JSON → Java Bean）。
+          - 类型转换（String → int、日期转换等）。
+          - 数据校验（Valid、JSR303 验证）。
+    - 执行处理器Handler(Controller，也叫页面控制器)。
+      - HandlerAdapter 最终会调用 Controller 里的方法
+    - Handler执行完成返回ModelAndView
+      - Controller 方法执行后，返回一个 ModelAndView：
+    - HandlerAdapter将Handler执行结果ModelAndView返回到DispatcherServlet
+      - HandlerAdapter 接收 Controller 的结果，把 ModelAndView 返回给 DispatcherServlet。
+    - DispatcherServlet将ModelAndView传给ViewReslover视图解析器
+    - ViewReslover解析后返回具体View
+      - ViewResolver 会根据配置规则，把 "userList" 解析成一个 JSP 或 Thymeleaf 页面
+    - DispatcherServlet对View进行渲染视图（即将模型数据model填充至视图中）。
+      - DispatcherServlet 拿到具体的 View（JSP/Thymeleaf/Freemarker），把 Model 数据填充进去。
+      - 比如 JSP 页面里 {users} 就会被替换成实际的数据列表。
+    - DispatcherServlet响应用户。
+      - 渲染好的 HTML 最终通过 DispatcherServlet 返回给浏览器。
+  -  Handlermapping 和 handleradapter有了解吗？
+    - HandlerMapping：
+      - 作用：HandlerMapping负责将请求映射到处理器（Controller）。
+      - 功能：根据请求的URL、请求参数等信息，找到处理请求的 Controller。
+      - 类型：Spring提供了多种HandlerMapping实现，如BeanNameUrlHandlerMapping、RequestMappingHandlerMapping等。
+      - 工作流程：根据请求信息确定要请求的处理器(Controller)。HandlerMapping可以根据URL、请求参数等规则确定对应的处理器。
+    - HandlerAdapter：
+      - 作用：HandlerAdapter负责调用处理器(Controller)来处理请求。
+      - 功能：处理器(Controller)可能有不同的接口类型（Controller接口、HttpRequestHandler接口等），HandlerAdapter根据处理器的类型来选择合适的方法来调用处理器。
+      - 类型：Spring提供了多个HandlerAdapter实现，用于适配不同类型的处理器。
+      - 工作流程：根据处理器的接口类型，选择相应的HandlerAdapter来调用处理器。
+= SpringBoot 
+  - 为什么使用springboot
+    - 简化开发：Spring Boot通过提供一系列的开箱即用的组件和自动配置，简化了项目的配置和开发过程，开发人员可以更专注于业务逻辑的实现，而不需要花费过多时间在繁琐的配置上。
+    - 快速启动：Spring Boot提供了快速的应用程序启动方式，可通过内嵌的Tomcat、Jetty或Undertow等容器快速启动应用程序，无需额外的部署步骤，方便快捷。
+    - 自动化配置：Spring Boot通过自动配置功能，根据项目中的依赖关系和约定俗成的规则来配置应用程序，减少了配置的复杂性，使开发者更容易实现应用的最佳实践。
+  - SpringBoot比Spring好在哪里
+    - Spring Boot 提供了自动化配置，大大简化了项目的配置过程。通过约定优于配置的原则，很多常用的配置可以自动完成，开发者可以专注于业务逻辑的实现。
+    - Spring Boot 提供了快速的项目启动器，通过引入不同的 Starter，可以快速集成常用的框架和库（如数据库、消息队列、Web 开发等），极大地提高了开发效率。
+    - Spring Boot 默认集成了多种内嵌服务器（如Tomcat、Jetty、Undertow），无需额外配置，即可将应用打包成可执行的 JAR 文件，方便部署和运行。
+  - SpringBoot用到哪些设计模式？
+    - 代理模式：Spring 的 AOP 通过动态代理实现方法级别的切面增强，有静态和动态两种代理方式，采用动态代理方式。
+    - 策略模式：Spring AOP 支持 JDK 和 Cglib 两种动态代理实现方式，通过策略接口和不同策略类，运行时动态选择，其创建一般通过工厂方法实现。
+      - 策略模式定义一系列算法，把它们一个个封装起来，并且使它们可以互相替换，让算法的变化独立于使用它的客户端。
+    - 装饰器模式：Spring 用 TransactionAwareCacheDecorator 解决缓存与数据库事务问题增加对事务的支持。
+      - 装饰器模式在不改变原有类结构的情况下，动态地给对象增加额外的功能。
+    - 单例模式：Spring Bean 默认是单例模式，通过单例注册表（如 HashMap）实现。
+    - 简单工厂模式：Spring 中的 BeanFactory 是简单工厂模式的体现，通过工厂类方法获取 Bean 实例。
+      - 简单工厂模式由一个工厂类（通常是静态方法）根据传入的参数，决定创建哪一个具体的产品类实例。
+    - 工厂方法模式：Spring中的 FactoryBean 体现工厂方法模式，为不同产品提供不同工厂。
+      - 工厂方法模式将对象的创建延迟到子类（具体工厂）中，每个工厂类负责创建一种产品。
+        - 符合 开闭原则：新增产品时，只需要增加新的工厂类，不需要修改原有工厂代码。
+    - 观察者模式：Spring 观察者模式包含 Event 事件、Listener 监听者、Publisher 发送者，通过定义事件、监听器和发送者实现，观察者注册在 ApplicationContext 中，消息发送由 
+      - 观察者模式定义了对象间的一种 一对多 的依赖关系，当一个对象（主题 / 被观察者）的状态发生变化时，所有依赖它的对象（观察者）都会收到通知并自动更新。它解决的核心问题：发布者与订阅者之间的解耦。符合 依赖倒置 原则。
+    - 模板模式：Spring Bean 的创建过程涉及模板模式，体现扩展性，类似 Callback 回调实现方式。
+    - 适配器模式：Spring MVC 中针对不同方式定义的 Controller，利用适配器模式统一函数定义，定义了统一接口 HandlerAdapter 及对应适配器类。
+      - 适配器模式把不兼容的接口，变成兼容的接口。
+  - 怎么理解SpringBoot中的约定大于配置
+    - 约定大于配置是Spring Boot的核心设计理念，它通过预设合理的默认行为和项目规范，大幅减少开发者需要手动配置的步骤，从而提升开发效率和项目标准化程度。
+    - 理解 Spring Boot 中的“约定大于配置”原则，可以从以下几个方面来解释：
+      - 自动化配置：Spring Boot 提供了大量的自动化配置，通过分析项目的依赖和环境，自动配置应用程序的行为。开发者无需显式地配置每个细节，大部分常用的配置都已经预设好了。例如，引入spring-boot-starter-web后，Spring Boot会自动配置内嵌Tomcat和Spring MVC，无需手动编写XML。
+      - 默认配置：Spring Boot 为诸多方面提供大量默认配置，如连接数据库、设置 Web 服务器、处理日志等。开发人员无需手动配置这些常见内容，框架已做好决策。例如，默认的日志配置可让应用程序快速输出日志信息，无需开发者额外繁琐配置日志级别、输出格式与位置等。
+      - 约定的项目结构：Spring Boot 提倡特定项目结构，通常主应用程序类（含 main 方法）置于根包，控制器类、服务类、数据访问类等分别放在相应子包，如com.example.demo.controller放控制器类，com.example.demo.service放服务类等。此约定使团队成员更易理解项目结构与组织，新成员加入项目时能快速定位各功能代码位置，提升协作效率。
+
+
+  - SpringBoot的项目结构是怎么样的？
+    - 开放接口层：可直接封装 Service 接口暴露成 RPC 接口；通过 Web 封装成 http 接口；网关控制层等。
+    - 终端显示层：各个端的模板渲染并执行显示的层。当前主要是 velocity 渲染，JS 渲染，JSP 渲染，移动端展示等。
+    - Web 层：主要是对访问控制进行转发，各类基本参数校验，或者不复用的业务简单处理等。
+    - Service 层：相对具体的业务逻辑服务层。
+    - Manager 层：通用业务处理层，它有如下特征：
+      - 对第三方平台封装的层，预处理返回结果及转化异常信息，适配上层接口。
+      - 对 Service 层通用能力的下沉，如缓存方案、中间件通用处理。
+      - 与 DAO 层交互，对多个 DAO 的组合复用。
+    - DAO 层：数据访问层，与底层 MySQL、Oracle、Hbase、OceanBase 等进行数据交互。
+    - 第三方服务：包括其它部门 RPC 服务接口，基础平台，其它公司的 HTTP 接口，如淘宝开放平台、支付宝付款服务、高德地图服务等。
+    - 外部接口：外部（应用）数据存储服务提供的接口，多见于数据迁移场景中。
+    #image("Screenshot_20250916_154803.png")
+  - SpringBoot自动装配原理是什么？
+    - 什么是自动装配？
+      - SpringBoot 的自动装配原理是基于Spring Framework的条件化配置和EnableAutoConfiguration注解实现的。这种机制允许开发者在项目中引入相关的依赖，SpringBoot 将根据这些依赖自动配置应用程序的上下文和功能。
+      - SpringBoot 定义了一套接口规范，这套规范规定：SpringBoot 在启动时会扫描外部引用 jar 包中的META-INF/spring.factories文件，将文件中配置的类型信息加载到 Spring 容器（此处涉及到 JVM 类加载机制与 Spring 的容器知识），并执行类中定义的各种操作。对于外部 jar 来说，只需要按照 SpringBoot 定义的标准，就能将自己的功能装置进 SpringBoot。
+      - 通俗来讲，自动装配就是通过注解或一些简单的配置就可以在SpringBoot的帮助下开启和配置各种功能，比如数据库访问、Web开发。
+    - SpringBoot自动装配原理
+      #image("Screenshot_20250917_104010.png")
+      - Target({ElementType.TYPE}): 该注解指定了这个注解可以用来标记在类上。在这个特定的例子中，这表示该注解用于标记配置类。
+      - Retention(RetentionPolicy.RUNTIME): 这个注解指定了注解的生命周期，即在运行时保留。这是因为 Spring Boot 在运行时扫描类路径上的注解来实现自动配置，所以这里使用了 RUNTIME 保留策略。
+      - Documented: 该注解表示这个注解应该被包含在 Java 文档中。它是用于生成文档的标记，使开发者能够看到这个注解的相关信息。
+      - Inherited: 这个注解指示一个被标注的类型是被继承的。在这个例子中，它表明这个注解可以被继承，如果一个类继承了带有这个注解的类，它也会继承这个注解。
+      - SpringBootConfiguration: 这个注解表明这是一个 Spring Boot 配置类。如果点进这个注解内部会发现与标准的 Configuration 没啥区别，只是为了表明这是一个专门用于 SpringBoot 的配置。
+      - EnableAutoConfiguration: 这个注解是 Spring Boot 自动装配的核心。它告诉 Spring oot 启用自动配置机制，根据项目的依赖和配置自动配置应用程序的上下文。通过这个注解，SpringBoot 将尝试根据类路径上的依赖自动配置应用程序。
+      - ComponentScan: 这个注解用于配置组件扫描的规则。在这里，它告诉 SpringBoot 在指定的包及其子包中查找组件，这些组件包括被注解的类、Component 注解的类等。其中的 excludeFilters 参数用于指定排除哪些组件，这里使用了两个自定义的过滤器，分别是 TypeExcludeFilter 和 AutoConfigurationExcludeFilter。
+      - EnableAutoConfiguration 这个注解是实现自动装配的核心注解
+        - AutoConfigurationPackage，将项目src中main包下的所有组件注册到容器中，例如标注了Component注解的类等
+        - Import({AutoConfigurationImportSelector.class})，是自动装配的核心，接下来分析一下这个注解
+        - AutoConfigurationImportSelector 是 Spring Boot 中一个重要的类，它实现了 ImportSelector 接口，用于实现自动配置的选择和导入。具体来说，它通过分析项目的类路径和条件来决定应该导入哪些自动配置类。
+        - 梳理一下，以下是AutoConfigurationImportSelector的主要工作：
+          - 扫描类路径: 在应用程序启动时，AutoConfigurationImportSelector 会扫描类路径上的 META-INF/spring.factories 文件，这个文件中包含了各种 Spring 配置和扩展的定义。在这里，它会查找所有实现了 AutoConfiguration 接口的类,具体的实现为getCandidateConfigurations方法。
+          - 条件判断: 对于每一个发现的自动配置类，AutoConfigurationImportSelector 会使用条件判断机制（通常是通过 ConditionalOnXxx注解）来确定是否满足导入条件。这些条件可以是配置属性、类是否存在、Bean是否存在等等。
+          - 根据条件导入自动配置类: 满足条件的自动配置类将被导入到应用程序的上下文中。这意味着它们会被实例化并应用于应用程序的配置。
+  -  说几个启动器（starter)？
+    - spring-boot-starter-web：这是最常用的起步依赖之一，它包含了Spring MVC和Tomcat嵌入式服务器，用于快速构建Web应用程序。
+    - spring-boot-starter-security：提供了Spring Security的基本配置，帮助开发者快速实现应用的安全性，包括认证和授权功能。
+    - mybatis-spring-boot-starter：这个Starter是由MyBatis团队提供的，用于简化在Spring Boot应用中集成MyBatis的过程。它自动配置了MyBatis的相关组件，包括SqlSessionFactory、MapperScannerConfigurer等，使得开发者能够快速地开始使用MyBatis进行数据库操作。
+    - spring-boot-starter-data-jpa 或 spring-boot-starter-jdbc：如果使用的是Java Persistence API (JPA)进行数据库操作，那么应该使用spring-boot-starter-data-jpa。这个Starter包含了Hibernate等JPA实现以及数据库连接池等必要的库，可以让你轻松地与MySQL数据库进行交互。你需要在application.properties或application.yml中配置MySQL的连接信息。如果倾向于直接使用JDBC而不通过JPA，那么可以使用spring-boot-starter-jdbc，它提供了基本的JDBC支持。
+    - spring-boot-starter-data-redis：用于集成Redis缓存和数据存储服务。这个Starter包含了与Redis交互所需的客户端（默认是Jedis客户端，也可以配置为Lettuce客户端），以及Spring Data Redis的支持，使得在Spring Boot应用中使用Redis变得非常便捷。同样地，需要在配置文件中设置Redis服务器的连接详情。
+    - spring-boot-starter-test：包含了单元测试和集成测试所需的库，如JUnit, Spring Test, AssertJ等，便于进行测试驱动开发(TDD)。
+  - 写过SpringBoot starter吗?
+    - 步骤1: 创建Maven项目
+      - 首先，需要创建一个新的Maven项目。在pom.xml中添加Spring Boot的starter parent和一些必要的依赖。
+    - 步骤2: 添加自动配置
+      - 在src/main/resources/META-INF/spring.factories中添加自动配置的元数据。
+      - 然后，创建MyAutoConfiguration类，该类需要Configuration和EnableConfigurationProperties注解。EnableConfigurationProperties用于启用你定义的配置属性类。
+      - 步骤3: 创建配置属性类
+        - 创建一个配置属性类，使用ConfigurationProperties注解来绑定配置文件中的属性。
+      - 步骤4: 创建服务和控制器
+        - 创建一个服务类和服务实现类，以及一个控制器来展示你的starter的功能。
+      - 步骤5: 发布Starter
+        - 将你的starter发布到Maven仓库，无论是私有的还是公共的，如Nexus或Maven Central。
+      - 步骤6: 使用Starter
+        - 在你的主应用的pom.xml中添加你的starter依赖，然后在application.yml或application.properties中配置你的属性。
+  - SpringBoot里面有哪些重要的注解？还有一个配置相关的注解是哪个？
+    - SpringBootApplication：用于标注主应用程序类，标识一个Spring Boot应用程序的入口点，同时启用自动配置和组件扫描。
+    - Controller：标识控制器类，处理HTTP请求。
+    - RestController：结合Controller和ResponseBody，返回RESTful风格的数据。
+    - Service：标识服务类，通常用于标记业务逻辑层。
+    - Repository：标识数据访问组件，通常用于标记数据访问层。
+    - Component：通用的Spring组件注解，表示一个受Spring管理的组件。
+    - Autowired：用于自动装配Spring Bean。
+    - Value：用于注入配置属性值。
+    - RequestMapping：用于映射HTTP请求路径到Controller的处理方法。
+    - GetMapping、PostMapping、PutMapping、DeleteMapping：简化RequestMapping的GET、POST、PUT和DELETE请求。
+    - 另外，一个与配置相关的重要注解是：
+      - Configuration：用于指定一个类为配置类，其中定义的bean会被Spring容器管理。通常与Bean配合使用，Bean用于声明一个Bean实例，由Spring容器进行管理。
+  -  springboot怎么开启事务？
+    - 在 Spring Boot 中开启事务非常简单，只需在服务层的方法上添加 Transactional 注解即可。
+  - Springboot怎么做到导入就可以直接使用的？
+    - 这个主要依赖于自动配置、起步依赖和条件注解等特性。
+      - 起步依赖
+        - 起步依赖是一种特殊的 Maven 或 Gradle 依赖，它将项目所需的一系列依赖打包在一起。spring-boot-starter-web 这个起步依赖就包含了 Spring Web MVC、Tomcat 等构建 Web 应用所需的核心依赖。
+        - 开发者只需在项目中添加一个起步依赖，Maven 或 Gradle 就会自动下载并管理与之关联的所有依赖，避免了手动添加大量依赖的繁琐过程。
+      - 自动配置
+        - Spring Boot 的自动配置机制会根据类路径下的依赖和开发者的配置，自动创建和配置应用所需的 Bean。它通过 EnableAutoConfiguration 注解启用，该注解会触发 Spring Boot 去查找 META - INF/spring.factories 文件。
+        - spring.factories 文件中定义了一系列自动配置类，Spring Boot 会根据当前项目的依赖情况，选择合适的自动配置类进行加载。例如，如果项目中包含 spring-boot-starter-web 依赖，Spring Boot 会加载 WebMvcAutoConfiguration 类，该类会自动配置 Spring MVC 的相关组件，如 DispatcherServlet、视图解析器等。
+        - 开发者可以通过自定义配置来覆盖自动配置的默认行为。如果开发者在 application.properties 或 application.yml 中定义了特定的配置，或者在代码中定义了同名的 Bean，Spring Boot 会优先使用开发者的配置。
+      - 条件注解
+        - 条件注解用于控制 Bean 的创建和加载，只有在满足特定条件时，才会创建相应的 Bean。Spring Boot 的自动配置类中广泛使用了条件注解
+        - 比如，ConditionalOnClass 表示只有当类路径中存在指定的类时，才会创建该 Bean。
+  - SpringBoot 过滤器和拦截器说一下？
+    #image("Screenshot_20250917_110639.png")
+    - 过滤器是 Java Servlet 规范中的一部分，它可以对进入 Servlet 容器的请求和响应进行预处理和后处理。过滤器通过实现 javax.servlet.Filter 接口，并重写其中的 init、doFilter 和 destroy 方法来完成相应的逻辑。当请求进入 Servlet 容器时，会按照配置的顺序依次经过各个过滤器，然后再到达目标 Servlet 或控制器；响应返回时，也会按照相反的顺序再次经过这些过滤器。
+    - 拦截器是 Spring 框架提供的一种机制，它可以对控制器方法的执行进行拦截。拦截器通过实现 org.springframework.web.servlet.HandlerInterceptor 接口，并重写其中的 preHandle、postHandle 和 afterCompletion 方法来完成相应的逻辑。当请求到达控制器时，会先经过拦截器的 preHandle 方法，如果该方法返回 true，则继续执行后续的控制器方法和其他拦截器；在控制器方法执行完成后，会调用拦截器的 postHandle 方法；最后，在请求处理完成后，会调用拦截器的 afterCompletion 方法。
+    - 过滤器和拦截器的区别如下：
+      - 所属规范：过滤器是 Java Servlet 规范的一部分，而拦截器是 Spring 框架提供的机制。
+      - 执行顺序：过滤器在请求进入 Servlet 容器后，在到达目标 Servlet 或控制器之前执行；拦截器在请求到达控制器之后，在控制器方法执行前后执行。
+      - 使用范围：过滤器可以对所有类型的请求进行过滤，包括静态资源请求；拦截器只能对 Spring MVC 控制器的请求进行拦截。
+      - 功能特性：过滤器主要用于对请求和响应进行预处理和后处理，如字符编码处理、请求日志记录等；拦截器可以更细粒度地控制控制器方法的执行，如权限验证、性能监控等。
+= Mybatis
+  - 与传统的JDBC相比，MyBatis的优点？
+    - 基于 SQL 语句编程，相当灵活，不会对应用程序或者数据库的现有设计造成任 何影响，SQL 写在 XML 里，解除 sql 与程序代码的耦合，便于统一管理；提供 XML 标签，支持编写动态 SQL 语句，并可重用。
+    - 与 JDBC 相比，减少了 50%以上的代码量，消除了 JDBC 大量冗余的代码，不 需要手动开关连接；
+    - 很好的与各种数据库兼容，因为 MyBatis 使用 JDBC 来连接数据库，所以只要 JDBC 支持的数据库 MyBatis 都支持。
+    - 能够与 Spring 很好的集成，开发效率高
+    - 提供映射标签，支持对象与数据库的 ORM 字段关系映射；提供对象关系映射 标签，支持对象关系组件维护。
+  - MyBatis觉得在哪方面做的比较好？
+    - MyBatis 在 SQL 灵活性、动态 SQL 支持、结果集映射和与 Spring 整合方面表现卓越，尤其适合重视 SQL 可控性的项目。
+    - SQL 与代码解耦，灵活可控：MyBatis 允许开发者直接编写和优化 SQL，相比全自动 ORM（如 Hibernate），MyBatis 让开发者明确知道每条 SQL 的执行逻辑，便于性能调优。
+    - 动态 SQL 的强大支持：比如可以动态拼接SQL，通过 if, choose, foreach 等标签动态生成 SQL，避免 Java 代码中繁琐的字符串拼接。
+    - 自动映射与自定义映射结合：自动将查询结果字段名与对象属性名匹配（如驼峰转换）。
+    - 插件扩展机制：可编写插件拦截 SQL 执行过程，实现分页、性能监控、SQL 改写等通用逻辑。
+    - 与 Spring 生态无缝集成：通过 MapperScan 快速扫描 Mapper 接口，结合 Spring 事务管理，配置简洁高效。
+  - 还记得JDBC连接数据库的步骤吗？
+    - 加载数据库驱动程序：在使用JDBC连接数据库之前，需要加载相应的数据库驱动程序。可以通过 Class.forName("com.mysql.jdbc.Driver") 来加载MySQL数据库的驱动程序。不同数据库的驱动类名会有所不同。
+    - 建立数据库连接：使用 DriverManager 类的 getConnection(url, username, password) 方法来连接数据库，其中url是数据库的连接字符串（包括数据库类型、主机、端口等）、username是数据库用户名，password是密码。
+    - 创建 Statement 对象：通过 Connection 对象的 createStatement() 方法创建一个 Statement 对象，用于执行 SQL 查询或更新操作。
+    - 执行 SQL 查询或更新操作：使用 Statement 对象的 executeQuery(sql) 方法来执行 SELECT 查询操作，或者使用 executeUpdate(sql) 方法来执行 INSERT、UPDATE 或 DELETE 操作。
+    - 处理查询结果：如果是 SELECT 查询操作，通过 ResultSet 对象来处理查询结果。可以使用 ResultSet 的 next() 方法遍历查询结果集，然后通过 getXXX() 方法获取各个字段的值。
+    - 关闭连接：在完成数据库操作后，需要逐级关闭数据库连接相关对象，即先关闭 ResultSet，再关闭 Statement，最后关闭 Connection。
+  - 如果项目中要用到原生的mybatis去查询，该怎样写？
+    - 配置MyBatis： 在项目中配置MyBatis的数据源、SQL映射文件等。
+    - 创建实体类： 创建用于映射数据库表的实体类。
+    - 编写SQL映射文件： 创建XML文件，定义SQL语句和映射关系。
+    - 编写DAO接口： 创建DAO接口，定义数据库操作的方法。
+    - 编写具体的SQL查询语句： 在DAO接口中定义查询方法，并在XML文件中编写对应的SQL语句。
+    - 调用查询方法： 在服务层或控制层调用DAO接口中的方法进行查询。
+  -  Mybatis里的 \# 和 \$ 的区别？
+    - Mybatis 在处理 \#{} 时，会创建预编译的 SQL 语句，将 SQL 中的 \#{} 替换为 ? 号，在执行 SQL 时会为预编译 SQL 中的占位符（?）赋值，调用 PreparedStatement 的 set 方法来赋值，预编译的 SQL 语句执行效率高，并且可以防止SQL 注入，提供更高的安全性，适合传递参数值。
+      - 防止sql注入原理：
+        #image("Screenshot_20250917_112637.png")
+        - 替代？的是直接数据
+        #image("Screenshot_20250917_112653.png")
+        - 如该图片内的插入数据，插入时只会识别成一个整个字符串而不是直接拼接到语句
+        - 而使用\$就会直接拼接语句，导致识别到永真式
+    - Mybatis 在处理 \${} 时，只是创建普通的 SQL 语句，然后在执行 SQL 语句时 MyBatis 将参数直接拼入到 SQL 里，不能防止 SQL 注入，因为参数直接拼接到 SQL 语句中，如果参数未经过验证、过滤，可能会导致安全问题。
+  - MybatisPlus和Mybatis的区别？
+    - MybatisPlus是一个基于MyBatis的增强工具库，旨在简化开发并提高效率。以下是MybatisPlus和MyBatis之间的一些主要区别：
+      - CRUD操作：MybatisPlus通过继承BaseMapper接口，提供了一系列内置的快捷方法，使得CRUD操作更加简单，无需编写重复的SQL语句。
+      - 代码生成器：MybatisPlus提供了代码生成器功能，可以根据数据库表结构自动生成实体类、Mapper接口以及XML映射文件，减少了手动编写的工作量。
+      - 通用方法封装：MybatisPlus封装了许多常用的方法，如条件构造器、排序、分页查询等，简化了开发过程，提高了开发效率。
+      - 分页插件：MybatisPlus内置了分页插件，支持各种数据库的分页查询，开发者可以轻松实现分页功能，而在传统的MyBatis中，需要开发者自己手动实现分页逻辑。
+      - 多租户支持：MybatisPlus提供了多租户的支持，可以轻松实现多租户数据隔离的功能。
+      - 注解支持：MybatisPlus引入了更多的注解支持，使得开发者可以通过注解来配置实体与数据库表之间的映射关系，减少了XML配置文件的编写。
+  -  MyBatis运用了哪些常见的设计模式？
+    - 建造者模式（Builder），如：SqlSessionFactoryBuilder、XMLConfigBuilder、
+    #image("Screenshot_20250917_113126.png")
+    - 工厂模式，如：SqlSessionFactory、ObjectFactory、MapperProxyFactory；
+    - 单例模式，例如ErrorContext和LogFactory；
+    - 代理模式，Mybatis实现的核心，比如MapperProxy、ConnectionLogger，用的jdk的动态代理；还有executor.loader包使用了cglib或者javassist达到延迟加载的效果；
+    - 组合模式，例如SqlNode和各个子类ChooseSqlNode等；
+    - 模板方法模式，例如BaseExecutor和SimpleExecutor，还有BaseTypeHandler和所有的子类例如IntegerTypeHandler；
+    - 适配器模式，例如Log的Mybatis接口和它对jdbc、log4j等各种日志框架的适配实现；
+    - 装饰者模式，例如Cache包中的cache.decorators子包中等各个装饰者的实现；
+    - 迭代器模式，例如迭代器模式PropertyTokenizer；
+= SpringCloud
+  - 了解SpringCloud吗，说一下他和SpringBoot的区别
+    - Spring Boot是用于构建单个Spring应用的框架，而Spring Cloud则是用于构建分布式系统中的微服务架构的工具，Spring Cloud提供了服务注册与发现、负载均衡、断路器、网关等功能。
+    - 两者可以结合使用，通过Spring Boot构建微服务应用，然后用Spring Cloud来实现微服务架构中的各种功能。
+  - 用过哪些微服务组件？
+    - 注册中心：注册中心是微服务架构最核心的组件。它起到的作用是对新节点的注册与状态维护，解决了「如何发现新节点以及检查各节点的运行状态的问题」。微服务节点在启动时会将自己的服务名称、IP、端口等信息在注册中心登记，注册中心会定时检查该节点的运行状态。注册中心通常会采用心跳机制最大程度保证已登记过的服务节点都是可用的。
+    - 负载均衡：负载均衡解决了「如何发现服务及负载均衡如何实现的问题」，通常微服务在互相调用时，并不是直接通过IP、端口进行访问调用。而是先通过服务名在注册中心查询该服务拥有哪些节点，注册中心将该服务可用节点列表返回给服务调用者，这个过程叫服务发现，因服务高可用的要求，服务调用者会接收到多个节点，必须要从中进行选择。因此服务调用者一端必须内置负载均衡器，通过负载均衡策略选择合适的节点发起实质性的通信请求。
+    - 服务通信：服务通信组件解决了「服务间如何进行消息通信的问题」，服务间通信采用轻量级协议，通常是HTTP RESTful风格。但因为RESTful风格过于灵活，必须加以约束，通常应用时对其封装。例如在SpringCloud中就提供了Feign和RestTemplate两种技术屏蔽底层的实现细节，所有开发者都是基于封装后统一的SDK进行开发，有利于团队间的相互合作。
+    - 配置中心：配置中心主要解决了「如何集中管理各节点配置文件的问题」，在微服务架构下，所有的微服务节点都包含自己的各种配置文件，如jdbc配置、自定义配置、环境配置、运行参数配置等。要知道有的微服务可能可能有几十个节点，如果将这些配置文件分散存储在节点上，发生配置更改就需要逐个节点调整，将给运维人员带来巨大的压力。配置中心便由此而生，通过部署配置中心服务器，将各节点配置文件从服务中剥离，集中转存到配置中心。一般配置中心都有UI界面，方便实现大规模集群配置调整。
+    - 集中式日志管理：集中式日志主要是解决了「如何收集各节点日志并统一管理的问题」。微服务架构默认将应用日志分别保存在部署节点上，当需要对日志数据和操作数据进行数据分析和数据统计时，必须收集所有节点的日志数据。那么怎么高效收集所有节点的日志数据呢？业内常见的方案有ELK、EFK。通过搭建独立的日志收集系统，定时抓取各节点增量日志形成有效的统计报表，为统计和分析提供数据支撑。
+    - 分布式链路追踪：分布式链路追踪解决了「如何直观的了解各节点间的调用链路的问题」。系统中一个复杂的业务流程，可能会出现连续调用多个微服务，我们需要了解完整的业务逻辑涉及的每个微服务的运行状态，通过可视化链路图展现，可以帮助开发人员快速分析系统瓶颈及出错的服务。
+    - 服务保护：服务保护主要是解决了「如何对系统进行链路保护，避免服务雪崩的问题」。在业务运行时，微服务间互相调用支撑，如果某个微服务出现高延迟导致线程池满载，或是业务处理失败。这里就需要引入服务保护组件来实现高延迟服务的快速降级，避免系统崩溃。
+    - spirngcloudalibaba
+    #image("Screenshot_20250917_114747.png")
+  - 负载均衡有哪些算法？
+    - 简单轮询：将请求按顺序分发给后端服务器上，不关心服务器当前的状态，比如后端服务器的性能、当前的负载。
+    - 加权轮询：根据服务器自身的性能给服务器设置不同的权重，将请求按顺序和权重分发给后端服务器，可以让性能高的机器处理更多的请求
+    - 简单随机：将请求随机分发给后端服务器上，请求越多，各个服务器接收到的请求越平均
+    - 加权随机：根据服务器自身的性能给服务器设置不同的权重，将请求按各个服务器的权重随机分发给后端服务器
+    - 一致性哈希：根据请求的客户端 ip、或请求参数通过哈希算法得到一个数值，利用该数值取模映射出对应的后端服务器，这样能保证同一个客户端或相同参数的请求每次都使用同一台服务器
+    - 小活跃数：统计每台服务器上当前正在处理的请求数，也就是请求活跃数，将请求分发给活跃数最少的后台服务器
+  - 如何实现一直均衡给一个用户？
+    - 可以通过「一致性哈希算法」来实现，根据请求的客户端 ip、或请求参数通过哈希算法得到一个数值，利用该数值取模映射出对应的后端服务器，这样能保证同一个客户端或相同参数的请求每次都使用同一台服务器。
+  - 介绍一下服务熔断
+    - 服务熔断是应对微服务雪崩效应的一种链路保护机制，类似股市、保险丝。
+    - 比如说，微服务之间的数据交互是通过远程调用来完成的。服务A调用服务，服务B调用服务c，某一时间链路上对服务C的调用响应时间过长或者服务C不可用，随着时间的增长，对服务C的调用也越来越多，然后服务C崩溃了，但是链路调用还在，对服务B的调用也在持续增多，然后服务B崩溃，随之A也崩溃，导致雪崩效应。
+    - 服务熔断是应对雪崩效应的一种微服务链路保护机制。例如在高压电路中，如果某个地方的电压过高，熔断器就会熔断，对电路进行保护。同样，在微服务架构中，熔断机制也是起着类似的作用。当调用链路的某个微服务不可用或者响应时间太长时，会进行服务熔断，不再有该节点微服务的调用，快速返回错误的响应信息。当检测到该节点微服务调用响应正常后，恢复调用链路。
+    - 所以，服务熔断的作用类似于我们家用的保险丝，当某服务出现不可用或响应超时的情况时，为了防止整个系统出现雪崩，暂时停止对该服务的调用。
+    - 在Spring Cloud框架里，熔断机制通过Hystrix实现。Hystrix会监控微服务间调用的状况，当失败的调用到一定阈值，缺省是5秒内20次调用失败，就会启动熔断机制。
+    - 服务熔断（Circuit Breaker） 的核心作用之一，就是 防止下游服务的故障蔓延，保护上游服务。
+  - 介绍一下服务降级
+    - 服务降级一般是指在服务器压力剧增的时候，根据实际业务使用情况以及流量，对一些服务和页面有策略的不处理或者用一种简单的方式进行处理，从而释放服务器资源的资源以保证核心业务的正常高效运行。
+    - 服务器的资源是有限的，而请求是无限的。在用户使用即并发高峰期，会影响整体服务的性能，严重的话会导致宕机，以至于某些重要服务不可用。故高峰期为了保证核心功能服务的可用性，就需要对某些服务降级处理。可以理解为舍小保大
+    - 服务降级是从整个系统的负荷情况出发和考虑的，对某些负荷会比较高的情况，为了预防某些功能（业务场景）出现负荷过载或者响应慢的情况，在其内部暂时舍弃对一些非核心的接口和数据的请求，而直接返回一个提前准备好的fallback（退路）错误处理信息。这样，虽然提供的是一个有损的服务，但却保证了整个系统的稳定性和可用性。
+
+
+
+
+
+
+
+
 
 
 
