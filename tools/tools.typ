@@ -157,7 +157,9 @@
         - 策略：
           - 设置 随机 TTL（带一点抖动），避免同一时间大规模同时过期。
           - Caffeine 可以设置短 TTL（比如 30 秒），Redis 设置稍长 TTL（比如 5 分钟 + 随机 30 秒）。
-          - 这样即使 Redis 大量 Key 同时过期，Caffeine 还能兜一阵子。
-          
+          - 这样即使 Redis 大量 Key 同时过期，Caffeine 还能兜一阵子。      
+
+
 - Sa-token
 - snailjob
+
