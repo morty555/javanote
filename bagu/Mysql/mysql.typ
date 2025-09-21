@@ -127,7 +127,248 @@
   - 子查询数据多，子表有索引，用exists
   - 子查询数据少，外层表有索引，用in
   - mysql的执行机制，即使你写了in,也可能优化成exists,主要还是看执行计划
-- mysql中的一些基本函数，你知道哪些？
+- mysql中的一些基本函数，你知道哪些？ 
+  - 字符串函数
+    - CONCAT(str1, str2, ...)：连接多个字符串，返回一个合并后的字符串。
+    - LENGTH(str)：返回字符串的长度（字符数）。
+    - SUBSTRING(str, pos, len)：从指定位置开始，截取指定长度的子字符串。
+    - REPLACE(str, from_str, to_str)：将字符串中的某部分替换为另一个字符串。
+  - 数值函数
+    - ABS(num)：返回数字的绝对值。
+    - POWER(num, exponent)：返回指定数字的指定幂次方。
+  - 日期和时间函数
+    - NOW()：返回当前日期和时间。
+    - CURDATE()：返回当前日期。
+  - 聚合函数
+    - COUNT(column)：计算指定列中的非NULL值的个数。
+    - SUM(column)：计算指定列的总和。
+    - AVG(column)：计算指定列的平均值。
+    - MAX(column)：返回指定列的最大值。
+    - MIN(column)：返回指定列的最小值。
+- SQL查询语句的执行顺序是怎么样的？
+  - 所有的查询语句都是从FROM开始执行，在执行过程中，每个步骤都会生成一个虚拟表，这个虚拟表将作为下一个执行步骤的输入，最后一个步骤产生的虚拟表即为输出结果。
+  ```SQL
+    (9) SELECT 
+  (10) DISTINCT <column>,
+  (6) AGG_FUNC <column> or <expression>, ...
+  (1) FROM <left_table> 
+      (3) <join_type>JOIN<right_table>
+      (2) ON<join_condition>
+  (4) WHERE <where_condition>
+  (5) GROUP BY <group_by_list>
+  (7) WITH {CUBE|ROLLUP}
+  (8) HAVING <having_condtion>
+  (11) ORDER BY <order_by_list>
+  (12) LIMIT <limit_number>; 
+  ```
+  #image("Screenshot_20250921_120826.png")
+- sql题：给学生表、课程成绩表，求不存在01课程但存在02课程的学生的成绩
+  - 方法1：使用LEFT JOIN 和 IS NULL
+  ```SQL
+    SELECT s.sid, s.sname, sc2.cid, sc2.score
+  FROM Student s
+  LEFT JOIN Score AS sc1 ON s.sid = sc1.sid AND sc1.cid = '01'
+  LEFT JOIN Score AS sc2 ON s.sid = sc2.sid AND sc2.cid = '02'
+  WHERE sc1.cid IS NULL AND sc2.cid IS NOT NULL;
+  ```
+  - 方法2：使用NOT EXISTS
+  ```SQL
+    SELECT s.sid, s.sname, sc.cid, sc.score
+  FROM Student s
+  JOIN Score sc ON s.sid = sc.sid AND sc.cid = '02'
+  WHERE NOT EXISTS (
+      SELECT 1 FROM Score sc1 WHERE sc1.sid = s.sid AND sc1.cid = '01'
+  );
+ 
+  ```
+- 给定一个学生表 student_score（stu_id，subject_id，score），查询总分排名在5-10名的学生id及对应的总分
+  - 其中我们先计算每个学生的总分，然后为其分配一个排名，最后检索排名在 5 到 10 之间的记录。
+  ```SQL
+      WITH StudentTotalScores AS (
+        SELECT 
+            stu_id,
+            SUM(score) AS total_score
+        FROM 
+            student_score
+        GROUP BY 
+            stu_id
+    ),
+    RankedStudents AS (
+        SELECT
+            stu_id,
+            total_score,
+            RANK() OVER (ORDER BY total_score DESC) AS ranking
+        FROM
+            StudentTotalScores
+    )
+    SELECT
+        stu_id,
+        total_score
+    FROM
+        RankedStudents
+    WHERE
+        ranking BETWEEN 5 AND 10;
+
+  ```
+  - 子查询 StudentTotalScores 中，我们通过对 student_score 表中的 stu_id 分组来计算每个学生的总分。
+  - 子查询 RankedStudents 中，我们使用 RANK() 函数为每个学生分配一个排名，按总分从高到低排序。
+  - 最后，我们在主查询中选择排名在 5 到 10 之间的学生。
+- SQL题：查某个班级下所有学生的选课情况
+  ```SQL
+      SELECT 
+        s.student_id,
+        s.student_name,
+        cs.course_name
+    FROM 
+        students s
+    JOIN 
+        course_selections cs ON s.student_id = cs.student_id
+    JOIN 
+        classes c ON s.class_id = c.class_id
+    WHERE 
+        c.class_name = 'Class A';
+
+  ```
+- 如何用 MySQL 实现一个可重入的锁？
+  - 创建一个保存锁记录的表：
+  ```java
+    CREATE TABLE `lock_table` (
+      `id` INT AUTO_INCREMENT PRIMARY KEY,
+      //该字段用于存储锁的名称，作为锁的唯一标识符。
+      `lock_name` VARCHAR(255) NOT NULL, 
+      // holder_thread该字段存储当前持有锁的线程的名称，用于标识哪个线程持有该锁。
+      `holder_thread` VARCHAR(255),   
+      // reentry_count 该字段存储锁的重入次数，用于实现锁的可重入性
+      `reentry_count` INT DEFAULT 0
+  );
+  ```
+  - 加锁的实现逻辑
+    - 开启事务
+    - 执行 SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name =? FOR UPDATE，查询是否存在该记录：
+      - 如果记录不存在，则直接加锁，执行 INSERT INTO lock_table (lock_name, holder_thread, reentry_count) VALUES (?,?, 1)
+      - 如果记录存在，且持有者是同一个线程，则可冲入，增加重入次数，执行 UPDATE lock_table SET reentry_count = reentry_count + 1 WHERE lock_name =?
+        - FOR UPDATE的作用是排他锁，其他事务如果也想更新这些行（或者也用 FOR UPDATE 查询同一行），就必须等待当前事务提交或回滚。
+    - 提交事务
+  - 解锁的逻辑
+    - 开启事务
+    - 执行 SQL SELECT holder_thread, reentry_count FROM lock_table WHERE lock_name =? FOR UPDATE，查询是否存在该记录：
+      - 如果记录存在，且持有者是同一个线程，且可重入数大于 1 ，则减少重入次数 UPDATE lock_table SET reentry_count = reentry_count - 1 WHERE lock_name =?
+      - 如果记录存在，且持有者是同一个线程，且可重入数小于等于 0 ，则完全释放锁，DELETE FROM lock_table WHERE lock_name =?
+    - 提交事务
+= 存储引擎
+- 执行一条SQL请求的过程是什么？
+  - 连接器：建立连接，管理连接、校验用户身份；
+  - 查询缓存：查询语句如果命中查询缓存则直接返回，否则继续往下执行。MySQL 8.0 已删除该模块；
+  - 解析 SQL，通过解析器对 SQL 查询语句进行词法分析、语法分析，然后构建语法树，方便后续模块读取表名、字段、语句类型；
+  - 执行 SQL：执行 SQL 共有三个阶段：
+    - 预处理阶段：检查表或字段是否存在；将 select \* 中的 \* 符号扩展为表上的所有列。
+    - 优化阶段：基于查询成本的考虑， 选择查询成本最小的执行计划；
+    - 执行阶段：根据执行计划执行 SQL 查询语句，从存储引擎读取记录，返回给客户端；
+    #image("Screenshot_20250921_134009.png")
+  - 为什么删除缓存
+   #image("Screenshot_20250921_134228.png")
+- MySQL为什么InnoDB是默认引擎？
+  - InnoDB引擎在事务支持、并发性能、崩溃恢复等方面具有优势，因此被MySQL选择为默认的存储引擎。
+  - 事务支持：InnoDB引擎提供了对事务的支持，可以进行ACID（原子性、一致性、隔离性、持久性）属性的操作。Myisam存储引擎是不支持事务的。
+  - 并发性能：InnoDB引擎采用了行级锁定的机制，可以提供更好的并发性能，Myisam存储引擎只支持表锁，锁的粒度比较大。
+  - 崩溃恢复：InnoDB引引擎通过 redolog 日志实现了崩溃恢复，可以在数据库发生异常情况（如断电）时，通过日志文件进行恢复，保证数据的持久性和一致性。Myisam是不支持崩溃恢复的。
+-  说一下mysql的innodb与MyISAM的区别？
+  - 事务：InnoDB 支持事务，MyISAM 不支持事务，这是 MySQL 将默认存储引擎从 MyISAM 变成 InnoDB 的重要原因之一。
+  - 索引结构：InnoDB 是聚簇索引，MyISAM 是非聚簇索引。聚簇索引的文件存放在主键索引的叶子节点上，因此 InnoDB 必须要有主键，通过主键索引效率很高。但是辅助索引需要两次查询，先查询到主键，然后再通过主键查询到数据。因此，主键不应该过大，因为主键太大，其他索引也都会很大。而 MyISAM 是非聚簇索引，数据文件是分离的，索引保存的是数据文件的指针。主键索引和辅助索引是独立的。
+  - 锁粒度：InnoDB 最小的锁粒度是行锁，MyISAM 最小的锁粒度是表锁。一个更新语句会锁住整张表，导致其他查询和更新都会被阻塞，因此并发访问受限。
+  - count 的效率：InnoDB 不保存表的具体行数，执行 select count(\*) from table 时需要全表扫描。而MyISAM 用一个变量保存了整个表的行数，执行上述语句时只需要读出该变量即可，速度很快。
+- 数据管理里，数据文件大体分成哪几种数据文件？
+  - 我们每创建一个 database（数据库） 都会在 /var/lib/mysql/ 目录里面创建一个以 database 为名的目录，然后保存表结构和表数据的文件都会存放在这个目录里。
+  - 比如，我这里有一个名为 my_test 的 database，该 database 里有一张名为 t_order 数据库表。
+  - 然后，我们进入 /var/lib/mysql/my_test 目录，看看里面有什么文件？
+    - db.opt，用来存储当前数据库的默认字符集和字符校验规则。
+    - t_order.frm ，t_order 的表结构会保存在这个文件。在 MySQL 中建立一张表都会生成一个.frm 文件，该文件是用来保存每个表的元数据信息的，主要包含表结构定义。
+    - t_order.ibd，t_order 的表数据会保存在这个文件。表数据既可以存在共享表空间文件（文件名：ibdata1）里，也可以存放在独占表空间文件（文件名：表名字.ibd）。这个行为是由参数 innodb_file_per_table 控制的，若设置了参数 innodb_file_per_table 为 1，则会将存储的数据、索引等信息单独存储在一个独占表空间，从 MySQL 5.6.6 版本开始，它的默认值就是 1 了，因此从这个版本之后， MySQL 中每一张表的数据都存放在一个独立的 .ibd 文件。
+= 索引
+- 索引是什么？有什么好处？
+  - 索引类似于书籍的目录，可以减少扫描的数据量，提高查询效率。
+  - 如果查询的时候，没有用到索引就会全表扫描，这时候查询的时间复杂度是On
+  - 如果用到了索引，那么查询的时候，可以基于二分查找算法，通过索引快速定位到目标数据， mysql 索引的数据结构一般是 b+树，其搜索复杂度为O(logdN)，其中 d 表示节点允许的最大子节点个数为 d 个。
+- 讲讲索引的分类是什么？
+  - 按「数据结构」分类：B+tree索引、Hash索引、Full-text索引。
+  - 按「物理存储」分类：聚簇索引（主键索引）、二级索引（辅助索引）。
+  - 按「字段特性」分类：主键索引、唯一索引、普通索引、前缀索引。
+  - 按「字段个数」分类：单列索引、联合索引。
+  - 按数据结构分类
+    - 从数据结构的角度来看，MySQL 常见索引有 B+Tree 索引、HASH 索引、Full-Text 索引。
+    - 每一种存储引擎支持的索引类型不一定相同，我在表中总结了 MySQL 常见的存储引擎 InnoDB、MyISAM 和 Memory 分别支持的索引类型。
+    #image("Screenshot_20250921_135604.png")
+    - InnoDB 是在 MySQL 5.5 之后成为默认的 MySQL 存储引擎，B+Tree 索引类型也是 MySQL 存储引擎采用最多的索引类型。
+    - 在创建表时，InnoDB 存储引擎会根据不同的场景选择不同的列作为索引：
+      - 如果有主键，默认会使用主键作为聚簇索引的索引键（key）；
+      - 如果没有主键，就选择第一个不包含 NULL 值的唯一列作为聚簇索引的索引键（key）；
+      - 在上面两个都没有的情况下，InnoDB 将自动生成一个隐式自增 id 列作为聚簇索引的索引键（key）；
+    - 其它索引都属于辅助索引（Secondary Index），也被称为二级索引或非聚簇索引。创建的主键索引和二级索引默认使用的是 B+Tree 索引。
+    - hash索引
+    #image("Screenshot_20250921_135734.png")
+    - fulltext索引 
+    #image("Screenshot_20250921_135849.png")
+    - fulltext和es区别
+    #image("Screenshot_20250921_135916.png")
+  - 按物理存储分类
+    - 从物理存储的角度来看，索引分为聚簇索引（主键索引）、二级索引（辅助索引）。
+    - 这两个区别在前面也提到了：
+      - 主键索引的 B+Tree 的叶子节点存放的是实际数据，所有完整的用户记录都存放在主键索引的 B+Tree 的叶子节点里；
+      - 二级索引的 B+Tree 的叶子节点存放的是主键值，而不是实际数据。
+      - 所以，在查询时使用了二级索引，如果查询的数据能在二级索引里查询的到，那么就不需要回表，这个过程就是覆盖索引。如果查询的数据不在二级索引里，就会先检索二级索引，找到对应的叶子节点，获取到主键值后，然后再检索主键索引，就能查询到数据了，这个过程就是回表。
+      - 二级索引也需要走到叶子节点才能查询到信息，中间节点只是索引不存储数据
+      #image("Screenshot_20250921_140247.png")
+  - 按字段特性分类
+    - 从字段特性的角度来看，索引分为主键索引、唯一索引、普通索引、前缀索引。
+    - 主键索引
+      - 主键索引就是建立在主键字段上的索引，通常在创建表的时候一起创建，一张表最多只有一个主键索引，索引列的值不允许有空值。
+    - 唯一索引
+      - 唯一索引建立在 UNIQUE 字段上的索引，一张表可以有多个唯一索引，索引列的值必须唯一，但是允许有空值。
+      - NULL是如何存储的？
+      #image("Screenshot_20250921_140535.png")
+      - 但是NULL不等于NULL，只有 IS NULL / IS NOT NULL 才能正常用到索引。
+    - 普通索引
+      - 普通索引就是建立在普通字段上的索引，既不要求字段为主键，也不要求字段为 UNIQUE。
+    - 前缀索引
+      - 前缀索引是指对字符类型字段的前几个字符建立的索引，而不是在整个字段上建立的索引，前缀索引可以建立在字段类型为 char、 varchar、binary、varbinary 的列上。
+      - 使用前缀索引的目的是为了减少索引占用的存储空间，提升查询效率。
+  - 按字段个数分类
+    - 从字段个数的角度来看，索引分为单列索引、联合索引（复合索引）。
+      - 建立在单列上的索引称为单列索引，比如主键索引；
+      - 建立在多列上的索引称为联合索引；
+    - 通过将多个字段组合成一个索引，该索引就被称为联合索引。
+    - 联合索引的非叶子节点用两个字段的值作为 B+Tree 的 key 值。当在联合索引查询数据时，先按 product_no 字段比较，在 product_no 相同的情况下再按 name 字段比较。
+    - 也就是说，联合索引查询的 B+Tree 是先按 product_no 进行排序，然后再 product_no 相同的情况再按 name 字段排序。
+    - 因此，使用联合索引时，存在最左匹配原则，也就是按照最左优先的方式进行索引的匹配。在使用联合索引进行查询的时候，如果不遵循「最左匹配原则」，联合索引会失效，这样就无法利用到索引快速查询的特性了。
+    - 比如，如果创建了一个 (a, b, c) 联合索引，如果查询条件是以下这几种，就可以匹配上联合索引：
+      ```SQL
+          where a=1；
+    where a=1 and b=2 and c=3；
+    where a=1 and b=2；
+
+      ```
+    - 需要注意的是，因为有查询优化器，所以 a 字段在 where 子句的顺序并不重要。
+    - 但是，如果查询条件是以下这几种，因为不符合最左匹配原则，所以就无法匹配上联合索引，联合索引就会失效:
+    ```SQL 
+    where b=2；
+    where c=3；
+    where b=2 and c=3；
+
+    ```
+    - 上面这些查询条件之所以会失效，是因为(a, b, c) 联合索引，是先按 a 排序，在 a 相同的情况再按 b 排序，在 b 相同的情况再按 c 排序。所以，b 和 c 是全局无序，局部相对有序的，这样在没有遵循最左匹配原则的情况下，是无法利用到索引的。
+    - 联合索引有一些特殊情况，并不是查询过程使用了联合索引查询，就代表联合索引中的所有字段都用到了联合索引进行索引查询，也就是可能存在部分字段用到联合索引的 B+Tree，部分字段没有用到联合索引的 B+Tree 的情况。
+    - 这种特殊情况就发生在范围查询。联合索引的最左匹配原则会一直向右匹配直到遇到「范围查询」就会停止匹配。也就是范围查询的字段可以用到联合索引，但是在范围查询字段的后面的字段无法用到联合索引。
+    - 范围查询必须要一个个拿出来
+    #image("Screenshot_20250921_141353.png")
+    - 因此即使是大于等于的范围查询，在大于等于取等于的情况也是会让后面的索引失效的
+-  MySQL聚簇索引和非聚簇索引的区别是什么？
+  - 数据存储：在聚簇索引中，数据行按照索引键值的顺序存储，也就是说，索引的叶子节点包含了实际的数据行。这意味着索引结构本身就是数据的物理存储结构。非聚簇索引的叶子节点不包含完整的数据行，而是包含指向数据行的指针或主键值。数据行本身存储在聚簇索引中。
+  - 索引与数据关系：由于数据与索引紧密相连，当通过聚簇索引查找数据时，可以直接从索引中获得数据行，而不需要额外的步骤去查找数据所在的位置。当通过非聚簇索引查找数据时，首先在非聚簇索引中找到对应的主键值，然后通过这个主键值回溯到聚簇索引中查找实际的数据行，这个过程称为“回表”。
+  - 唯一性：聚簇索引通常是基于主键构建的，因此每个表只能有一个聚簇索引，因为数据只能有一种物理排序方式。一个表可以有多个非聚簇索引，因为它们不直接影响数据的物理存储位置。
+  - 效率：对于范围查询和排序查询，聚簇索引通常更有效率，因为它避免了额外的寻址开销。非聚簇索引在使用覆盖索引进行查询时效率更高，因为它不需要读取完整的数据行。但是需要进行回表的操作，使用非聚簇索引效率比较低，因为需要进行额外的回表操作。
+  - 聚簇索引不一定是主键索引
+  #image("Screenshot_20250921_161048.png")
+- 如果聚簇索引的数据更新，它的存储要不要变化？
 
     
 
