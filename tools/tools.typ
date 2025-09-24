@@ -159,7 +159,83 @@
           - Caffeine 可以设置短 TTL（比如 30 秒），Redis 设置稍长 TTL（比如 5 分钟 + 随机 30 秒）。
           - 这样即使 Redis 大量 Key 同时过期，Caffeine 还能兜一阵子。      
 
+- springsecurity
+  - 用户登录前重定向到过滤器进行前端输入的账号密码与数据库的校验
+  - 可以给url设置用户权限
+  - 自定义service（在数据库查找用户信息）
+  - 在 Spring Security 里，认证成功之后，用户信息会被存放到一个全局的 SecurityContext 里。
+  - Spring Security + Redis 常见的优化方案
+    - 第一次登录：走完整的认证流程（查数据库 + 验证密码 + 校验验证码等）。
+    - 登录成功后：把用户信息缓存到 Redis（例如 user:\<username> → 用户对象，或者 token → 用户对象）。
+    - 下次请求：Spring Security 的过滤器先去 Redis 查，如果缓存里有用户，就直接放到 SecurityContext，省去数据库查询。
+  - 具体实现
+    - 登录成功时存 Redis
+    ```java 
+    @Component
+public class MyAuthenticationSuccessHandler implements AuthenticationSuccessHandler {
+    private final RedisTemplate<String, Object> redisTemplate;
 
+    public MyAuthenticationSuccessHandler(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+                                        Authentication authentication) throws IOException, ServletException {
+        String username = authentication.getName();
+        // 把用户信息存到 Redis，有效期 30 分钟
+        redisTemplate.opsForValue().set("login:" + username, authentication, 30, TimeUnit.MINUTES);
+
+        response.getWriter().write("登录成功");
+    }
+}
+
+    ```
+    - 自定义过滤器：请求时优先查 Redis
+    ```java 
+    @Component
+public class RedisAuthenticationFilter extends OncePerRequestFilter {
+
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    public RedisAuthenticationFilter(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
+        String username = request.getHeader("X-USER"); // 举例：从请求头取用户名（实际生产一般用 JWT token）
+        if (username != null) {
+            Authentication authentication = (Authentication) redisTemplate.opsForValue().get("login:" + username);
+            if (authentication != null) {
+                // 直接放到 SecurityContext，不用查数据库
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+}
+
+    ```
+    - Security 配置里注册
+    ```java
+    @Bean
+public SecurityFilterChain filterChain(HttpSecurity http, RedisAuthenticationFilter redisAuthFilter) throws Exception {
+    http
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/public/**").permitAll()
+            .anyRequest().authenticated()
+        )
+        .formLogin()
+        .successHandler(myAuthenticationSuccessHandler) // 登录成功处理器
+        .and()
+        .addFilterBefore(redisAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
+    return http.build();
+}
+ 
+    ```
 - Sa-token
 - snailjob
 

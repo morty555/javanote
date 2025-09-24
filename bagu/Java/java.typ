@@ -292,6 +292,9 @@
         - 修饰类：当final修饰一个类时，表示这个类不能被继承，是类继承体系中的最终形态。例如，Java 中的String类就是用final修饰的，这保证了String类的不可变性和安全性，防止其他类通过继承来改变String类的行为和特性。
         - 修饰方法：用final修饰的方法不能在子类中被重写。比如，java.lang.Object类中的getClass方法就是final的，因为这个方法的行为是由 Java 虚拟机底层实现来保证的，不应该被子类修改。
         - 修饰变量：当final修饰基本数据类型的变量时，该变量一旦被赋值就不能再改变。例如，final int num = 10;，这里的num就是一个常量，不能再对其进行重新赋值操作，否则会导致编译错误。对于引用数据类型，final修饰意味着这个引用变量不能再指向其他对象，但对象本身的内容是可以改变的。例如，final StringBuilder sb = new StringBuilder("Hello");，不能让sb再指向其他StringBuilder对象，但可以通过sb.append(" World");来修改字符串的内容。
+      - 当final修饰对象的时候，若对象的变量不用final修饰，则可以修改变量的值，final只是保证引用不变
+      - final修饰类不能被继承，final修饰方法不能被重写
+      - 声明一个类不能又是abstract又是final，抽象类要被继承，而final不能被继承
     - Java 中 static的作用是什么？
       - static 关键字主要用于修饰类的成员（变量、方法、代码块）和内部类，其核心作用是将成员与类本身关联，而非与类的实例（对象）关联。具体作用如下：
         - 修饰变量
@@ -368,7 +371,98 @@
         - 反射机制。反射机制允许在运行时检查和修改类、方法、字段等信息，通过反射可以绕过 private 访问修饰符的限制来获取私有对象。
   - 反射 
     - 什么是反射
-      - 
+      - Java 反射机制是在运行状态中，对于任意一个类，都能够知道这个类中的所有属性和方法，对于任意一个对象，都能够调用它的任意一个方法和属性；这种动态获取的信息以及动态调用对象的方法的功能称为 Java 语言的反射机制。
+      - 反射具有以下特性
+        - 运行时类信息访问：反射机制允许程序在运行时获取类的完整结构信息，包括类名、包名、父类、实现的接口、构造函数、方法和字段等。
+        - 动态对象创建：可以使用反射API动态地创建对象实例，即使在编译时不知道具体的类名。这是通过Class类的newInstance()方法或Constructor对象的newInstance()方法实现的。
+        - 动态方法调用：可以在运行时动态地调用对象的方法，包括私有方法。这通过Method类的invoke()方法实现，允许你传入对象实例和参数值来执行方法。
+        - 访问和修改字段值：反射还允许程序在运行时访问和修改对象的字段值，即使是私有的。这是通过Field类的get()和set()方法完成的。
+    - 反射在你平时写代码或者框架中的应用场景有哪些?
+      - 加载数据库驱动
+        - 我们的项目底层数据库有时是用mysql，有时用oracle，需要动态地根据实际情况加载驱动类，这个时候反射就有用了，假设 com.mikechen.java.myqlConnection，com.mikechen.java.oracleConnection这两个类我们要用。
+        - 这时候我们在使用 JDBC 连接数据库时使用 Class.forName()通过反射加载数据库的驱动程序，如果是mysql则传入mysql的驱动类，而如果是oracle则传入的参数就变成另一个了。
+      - 配置文件加载
+        - Spring 框架的 IOC（动态加载管理 Bean），Spring通过配置文件配置各种各样的bean，你需要用到哪些bean就配哪些，spring容器就会根据你的需求去动态加载，你的程序就能健壮地运行。
+        - Spring通过XML配置模式装载Bean的过程：
+          - 将程序中所有XML或properties配置文件加载入内存
+          - Java类里面解析xml或者properties里面的内容，得到对应实体类的字节码字符串以及相关的属性信息
+          - 使用反射机制，根据这个字符串获得某个类的Class实例
+          - 动态配置实例的属性
+  - 注解
+    - 能讲一讲Java注解的原理吗？
+      - 注解本质是一个继承了Annotation的特殊接口，其具体实现类是Java运行时生成的动态代理类。
+      - 我们通过反射获取注解时，返回的是Java运行时生成的动态代理对象。通过代理对象调用自定义注解的方法，会最终调用AnnotationInvocationHandler的invoke方法。该方法会从memberValues这个Map中索引出对应的值。而memberValues的来源是Java常量池。
+    - 对注解解析的底层实现了解吗？
+      - 注解本质上是一种特殊的接口，它继承自 java.lang.annotation.Annotation 接口，所以注解也叫声明式接口
+      - 编译后，Java 编译器会将其转换为一个继承自 Annotation 的接口，并生成相应的字节码文件。
+      - 根据注解的作用范围，Java 注解可以分为以下几种类型：
+        - 源码级别注解 ：仅存在于源码中，编译后不会保留
+        - 类文件级别注解 ：保留在 .class 文件中，但运行时不可见
+        - 运行时注解 ：保留在 .class 文件中，并且可以通过反射在运行时访问
+      - 当注解被标记为 RUNTIME 时，Java 编译器会在生成的 .class 文件中保存注解信息。这些信息存储在字节码的属性表（Attribute Table）中，具体包括以下内容：
+        - RuntimeVisibleAnnotations ：存储运行时可见的注解信息。
+        - RuntimeInvisibleAnnotations ：存储运行时不可见的注解信息。
+        - RuntimeVisibleParameterAnnotations 和 RuntimeInvisibleParameterAnnotations ：存储方法参数上的注解信息。
+      - 通过工具（如 javap -v）可以查看 .class 文件中的注解信息。
+      - 注解的解析主要依赖于 Java 的反射机制。以下是解析注解的基本流程：
+        - 获取注册信息：通过反射 API 可以获取类、方法、字段等元素上的注解。
+        - 底层原理：反射机制的核心类是 java.lang.reflect.AnnotatedElement，它是所有可以被注解修饰的元素（如 Class、Method、Field 等）的父接口。该接口提供了以下方法：
+          - getAnnotation(Class\<T> annotationClass)：获取指定类型的注解。
+          - getAnnotations()：获取所有注解。
+          - isAnnotationPresent(Class<? extends Annotation> annotationClass)：判断是否包含指定注解。
+        - 这些方法的底层实现依赖于 JVM 提供的本地方法（Native Method），例如：
+          - native Annotation[] getDeclaredAnnotations0(boolean publicOnly);
+          - native \<A extends Annotation> A getAnnotation(Class\<A> annotationClass);
+        - JVM 在加载类时会解析 .class 文件中的注解信息，并将其存储在内存中，供反射机制使用。
+      - 因此，注解解析的底层实现主要依赖于 Java 的反射机制和字节码文件的存储。通过 Retention 元注解可以控制注解的保留策略，当使用 RetentionPolicy.RUNTIME 时，可以在运行时通过反射 API 来解析注解信息。在 JVM 层面，会从字节码文件中读取注解信息，并创建注解的代理对象来获取注解的属性值。
+    - Java注解的作用域
+      - 注解的作用域（Scope）指的是注解可以应用在哪些程序元素上，例如类、方法、字段等。Java注解的作用域可以分为三种：
+      - 类级别作用域：用于描述类的注解，通常放置在类定义的上面，可以用来指定类的一些属性，如类的访问级别、继承关系、注释等。
+      - 方法级别作用域：用于描述方法的注解，通常放置在方法定义的上面，可以用来指定方法的一些属性，如方法的访问级别、返回值类型、异常类型、注释等。
+      - 字段级别作用域：用于描述字段的注解，通常放置在字段定义的上面，可以用来指定字段的一些属性，如字段的访问级别、默认值、注释等。
+  - 异常
+    - Java的异常体系主要基于两大类：Throwable类及其子类。Throwable有两个重要的子类：Error和Exception，它们分别代表了不同类型的异常情况。
+      - Error（错误）：表示运行时环境的错误。错误是程序无法处理的严重问题，如系统崩溃、虚拟机错误、动态链接失败等。通常，程序不应该尝试捕获这类错误。例如，OutOfMemoryError、StackOverflowError等。
+      - Exception（异常）：表示程序本身可以处理的异常条件。异常分为两大类：
+        - 非运行时异常：这类异常在编译时期就必须被捕获或者声明抛出。它们通常是外部错误，如文件不存在（FileNotFoundException）、类未找到（ClassNotFoundException）等。非运行时异常强制程序员处理这些可能出现的问题，增强了程序的健壮性。
+        - 运行时异常：这类异常包括运行时异常（RuntimeException）和错误（Error）。运行时异常由程序错误导致，如空指针访问（NullPointerException）、数组越界（ArrayIndexOutOfBoundsException）等。运行时异常是不需要在编译时强制捕获或声明的。
+    -  Java异常处理有哪些？
+      - 异常处理是通过使用try-catch语句块来捕获和处理异常。以下是Java中常用的异常处理方式：
+        - try-catch语句块：用于捕获并处理可能抛出的异常。try块中包含可能抛出异常的代码，catch块用于捕获并处理特定类型的异常。可以有多个catch块来处理不同类型的异常。
+        - throw语句：用于手动抛出异常。可以根据需要在代码中使用throw语句主动抛出特定类型的异常。
+        - throws关键字：用于在方法声明中声明可能抛出的异常类型。如果一个方法可能抛出异常，但不想在方法内部进行处理，可以使用throws关键字将异常传递给调用者来处理。
+        - finally块：用于定义无论是否发生异常都会执行的代码块。通常用于释放资源，确保资源的正确关闭。
+    - 抛出异常为什么不用throws？
+      - 如果异常是未检查异常或者在方法内部被捕获和处理了，那么就不需要使用throws。
+      - Unchecked Exceptions：未检查异常（unchecked exceptions）是继承自RuntimeException类或Error类的异常，编译器不强制要求进行异常处理。因此，对于这些异常，不需要在方法签名中使用throws来声明。示例包括NullPointerException、ArrayIndexOutOfBoundsException等。
+      - 捕获和处理异常：另一种常见情况是，在方法内部捕获了可能抛出的异常，并在方法内部处理它们，而不是通过throws子句将它们传递到调用者。这种情况下，方法可以处理异常而无需在方法签名中使用throws。
+    - try catch中的语句运行情况
+      - try块中的代码将按顺序执行，如果抛出异常，将在catch块中进行匹配和处理，然后程序将继续执行catch块之后的代码。如果没有匹配的catch块，异常将被传递给上一层调用的方法。
+    - try{return “a”} finally{return “b”}这条语句返回啥
+
+      - finally块中的return语句会覆盖try块中的return返回，因此，该语句将返回"b"。
+  - object
+    - ‘==’ 与 equals 有什么区别？
+      - 对于字符串变量来说，使用"=="和"equals"比较字符串时，其比较方法不同。"=="比较两个变量本身的值，即两个对象在内存中的首地址，"equals"比较字符串包含内容是否相同。
+      - 对于非字符串变量来说，如果没有对equals()进行重写的话，"==" 和 "equals"方法的作用是相同的，都是用来比较对象在堆内存中的首地址，即用来比较两个引用变量是否指向同一个对象。
+      - ==：对于基本类型（int、char、double 等），== 比较的是值本身。对于引用类型（对象），== 比较的是内存地址（引用是否相同），即是否指向同一个对象。
+      - equals()：默认实现（Object 类中的 equals）：比较的是引用地址，效果和 == 一样。子类重写后（比如 String、Integer 等）：比较的是对象的内容。
+    -  hashcode和equals方法有什么关系？
+      - 在 Java 中，对于重写 equals 方法的类，通常也需要重写 hashCode 方法，并且需要遵循以下规定：
+        - 一致性：如果两个对象使用 equals 方法比较结果为 true，那么它们的 hashCode 值必须相同。也就是说，如果 obj1.equals(obj2) 返回 true，那么 obj1.hashCode() 必须等于 obj2.hashCode()。
+        - 非一致性：如果两个对象的 hashCode 值相同，它们使用 equals 方法比较的结果不一定为 true。即 obj1.hashCode() == obj2.hashCode() 时，obj1.equals(obj2) 可能为 false，这种情况称为哈希冲突。
+      - hashCode 和 equals 方法是紧密相关的，重写 equals 方法时必须重写 hashCode 方法，以保证在使用哈希表等数据结构时，对象的相等性判断和存储查找操作能够正常工作。而重写 hashCode 方法时，需要确保相等的对象具有相同的哈希码，但相同哈希码的对象不一定相等。
+    - String、StringBuffer、StringBuilder的区别和联系
+      - 可变性 ：String 是不可变的（Immutable），一旦创建，内容无法修改，每次修改都会生成一个新的对象。StringBuilder 和 StringBuffer 是可变的（Mutable），可以直接对字符串内容进行修改而不会创建新对象。
+      - 线程安全性 ：String 因为不可变，天然线程安全。StringBuilder 不是线程安全的，适用于单线程环境。StringBuffer 是线程安全的，其方法通过 synchronized 关键字实现同步，适用于多线程环境。
+      - 性能 ：String 性能最低，尤其是在频繁修改字符串时会生成大量临时对象，增加内存开销和垃圾回收压力。StringBuilder 性能最高，因为它没有线程安全的开销，适合单线程下的字符串操作。StringBuffer 性能略低于 StringBuilder，因为它的线程安全机制引入了同步开销。
+      - 使用场景 ：如果字符串内容固定或不常变化，优先使用 String。如果需要频繁修改字符串且在单线程环境下，使用 StringBuilder。如果需要频繁修改字符串且在多线程环境下，使用 StringBuffer。
+  - Java 新特性
+    - Java 8 你知道有什么新特性？
+      #image("Screenshot_20250922_152507.png")
+    - Lambda 表达式了解吗？
+
+
 
 
      

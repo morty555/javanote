@@ -322,3 +322,104 @@
       - 验证失败：
         - 返回 401 JSON。
   #image("Screenshot_20250921_213937.png")
+- SynchronousQueue（不存储任务，提交任务必须有空闲线程，否则丢弃旧任务）
+  - 使用该队列的意义
+    - 不做本地排队：让 Redis 承担消息堆积，而不是 Java 内存队列。
+    - 保证实时消费：消费者忙时，不会再接收新任务，避免 OOM。
+    - 契合单线程模型：既然只有一个线程，多余任务排队没有意义。
+- 自定义线程工厂
+  - 守护线程
+    - 与普通（用户）线程的最大区别：JVM 在判断是否结束时只看“是否还有非守护线程活着”。
+    - 典型用途：后台监控、日志刷新、定期清理等“可丢弃”的辅助任务。
+    - 守护线程不会阻止 JVM 退出：只要最后一个非守护线程结束，JVM 会开始终止，守护线程会被 abruptly 停止（不会等待其完成）。
+    - JVM 关闭时会执行已注册的 shutdown hooks（钩子），但守护线程的工作不被保证完成。
+- redisstream
+  -  Redis Stream 本身保证消息可靠存储：Redis Stream 是持久化的：消息存储在 Redis 中，消费者组会维护一个消费进度（offset）。只要消费者没 ACK（确认消费），消息就会一直存在于 pending list。如果消费者挂掉，消息仍然在 Redis 里，等恢复后可以继续消费。这和 Kafka、RabbitMQ 类似，本质上是 拉取式队列 + 消费者组。
+- 利用string的setnx机制设置消息状态
+  - 所以就是利用setnx只能set相同数据一次的特性，来判断消息是否正在被消费，然后通过让不同消息id作为key,set他们的value为0或1,若为0就是正在消费中，若为1就是消费完成，因为setnx的特性，即使多次消费请求打入也只是一次，保证幂等性，删除key就是去除幂等性标识
+    #image("Screenshot_20250923_163948.png")
+- 何时调用string的setnx机制
+  - shortLinkStatsSaveConsumer实现了onmessage方法
+  - listenerContainer.register(...)：把 shortLinkStatsSaveConsumer（也就是 StreamListener 实现类）注册进来。
+  - listenerContainer.start()：启动后台线程，不断从 Redis Stream 拉取消息。
+  - 每当有消息到达时，容器就会调用你写的 onMessage 方法，并把消息对象（MapRecord）传进去。
+  - 如：
+    - 生产者（比如另一个服务）调用：stringRedisTemplate.opsForStream().add(topic, map);把一条消息写入 Redis Stream。
+    - StreamMessageListenerContainer 后台线程在 轮询 Redis Stream，拿到消息。
+    - 框架把这条消息封装成 MapRecord\<String, String, String>，然后回调：shortLinkStatsSaveConsumer.onMessage(record);
+- 流消息读取请求
+  - 需要给定参数
+    - 我要消费哪个 Stream（主题）
+    - 我属于哪个消费组，指定消费者
+      - 若有多个消费者，则会自动负载均衡，采用点对点模型，一条消息只会被 一个消费者 处理。
+      - 若还有不同消费组
+        - 广播（Pub/Sub）模型
+        - 一条消息会被 所有订阅者 消费。对应到 Redis Stream，就是 不同消费组。
+        - 消费者组的意义
+          - 水平扩展（组内负载均衡）
+            - 一个消费组内可以有多个消费者实例（比如多台服务或多线程）。
+            - 消息在组内被分配给不同消费者，同一条消息只会给组内一个消费者处理。
+            - 解决了单消费者处理能力不足的问题。
+          - 隔离消费逻辑（组间独立）
+            - 不同消费组可以针对同一条消息执行不同业务逻辑。
+            - groupA：记录统计日志
+            - groupB：更新缓存
+            - groupC：触发通知系统
+            - 每个组消费同一条消息，但互不干扰。
+          - 重试与消费确认独立
+            - 每个消费组维护自己的 Pending List 和 offset。
+            - 一个组的消费者挂了，不会影响其他组的消费进度。
+    - 我是否要自动确认（ack）消息
+    - 遇到错误要不要停掉监听
+- 消息监听容器
+  - 参数
+    - 设置一次拉取信息数量
+    - 设置处理信息的线程池
+    - 如果没有拉取到消息，阻塞等待的时间
+  - 为什么短链接项目只用一个线程
+   #image("Screenshot_20250923_171636.png")
+- 获取短链接
+  - 需要加读锁，用于保证多线程读操作的安全，避免在并发统计时出现冲突（例如同时更新数据库计数）
+  - 查询短链接对应的 GID
+  - 把一条短链接访问记录 拆解成多张统计表更新
+  #image("Screenshot_20250923_173022.png")
+- 总体流程概括
+  - 前端用户点击短链接 → 浏览器获取用户信息（IP、设备、浏览器、系统等）将这些信息封装成 ShortLinkStatsRecordDTO 发给后端
+  - 后端写入 Redis Stream
+    - 配置 Stream：
+      - 主题（Topic）：如 SHORT_LINK_STATS_STREAM_TOPIC_KEY
+      - 消费组（Consumer Group）：如 SHORT_LINK_STATS_STREAM_GROUP_KEY
+      - 消费者名称（Consumer Name）
+    - 通过 Redis Stream 保证消息顺序、可靠传递
+  -  消息队列监听器配置
+    - 使用 StreamMessageListenerContainer 创建监听器
+    - 配置：
+      - 自定义 线程池（目前只有一个线程）
+      - 拉取批量消息数量（batchSize）
+      - 阻塞时间（pollTimeout）
+      - 重试/错误策略 (cancelOnError)
+  -  消息幂等性处理
+    - MessageQueueIdempotentHandler：利用 Redis 的 setIfAbsent
+  - 消费者接收消息
+    - 当监听器发现 Stream 有新消息：
+      - 调用 ShortLinkStatsSaveConsumer.onMessage
+      - 将消息传入线程池执行
+      - 线程池是生产用来执行onmessage方法的线程的
+  - 消费者内部处理逻辑
+    - 对每个短链接使用 读写锁确保同一条短链接的统计数据在数据库更新时不会冲突
+    - 数据库操作：
+      - 更新统计表：PV/UV/UIP/按时间维度聚合
+      - 更新明细表：LinkAccessLogsDO 插入每条访问记录
+      - 可选调用外部服务：获取地理位置（AMap API）
+    - 完成后删除 Stream 消息
+    - 设置消息为已完成（幂等标记 1）
+- 限流配置
+  - InitializingBean：Spring 提供的一个接口，在 Bean 属性注入完成后会调用 afterPropertiesSet() 方法
+  - 过实现 InitializingBean，在 Spring 启动时就初始化 Sentinel 限流规则
+  - 新建一个 FlowRule 列表，用来存储限流规则
+  - FlowRule createOrderRule = new FlowRule(); → 新建一个流控规则对象
+  - setResource("create_short-link") → 限流的资源名称，这里是 "create_short-link"，对应业务中调用的接口或方法
+  - setGrade(RuleConstant.FLOW_GRADE_QPS) → 限流类型：按 QPS（每秒请求数） 限制
+  - setCount(1) → 每秒最大允许 1 个请求
+  - rules.add(createOrderRule) → 添加到规则列表
+  - FlowRuleManager.loadRules(rules);
