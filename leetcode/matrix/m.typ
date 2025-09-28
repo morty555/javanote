@@ -112,3 +112,92 @@
     }
 } 
     ```
+
+- 旋转图像
+  #image("Screenshot_20250928_204635.png")
+  - 原地旋转
+    ```java
+    class Solution {
+    public void rotate(int[][] matrix) {
+        int n = matrix.length;
+        for (int i = 0; i < n / 2; ++i) {
+            for (int j = 0; j < (n + 1) / 2; ++j) {
+                int temp = matrix[i][j];
+                matrix[i][j] = matrix[n - j - 1][i];
+                matrix[n - j - 1][i] = matrix[n - i - 1][n - j - 1];
+                matrix[n - i - 1][n - j - 1] = matrix[j][n - i - 1];
+                matrix[j][n - i - 1] = temp;
+            }
+        }
+    }
+}
+
+    ```
+    - 具体算法是
+      - 以矩阵的左上角为起点，循环将四个位置的元素进行交换
+      - 交换的四个位置分别是 (i, j)、(j, n - i - 1)、(n - i - 1, n - j - 1)、(n - j - 1, i)
+        - 就是按照四次旋转的公式不断代入得到的
+      - 其中 n 是矩阵的大小，i 和 j 分别是当前处理的行和列的索引
+      - 外层循环控制行数，只需要遍历到矩阵的中间行即可
+      - 内层循环控制列数，需要遍历到中间列，如果矩阵的列数是奇数，则需要多遍历一列
+      - 外层和内层循环的边界条件分别是 i < n / 2 和 j < (n + 1) / 2
+      - 不规定外层是i < n /2,内层也可以是i < n /2,保证总共遍历的次数不变即可
+  - 用翻转代替旋转
+    ```java
+    class Solution {
+    public void rotate(int[][] matrix) {
+        int n = matrix.length;
+        // 水平翻转
+        for (int i = 0; i < n / 2; ++i) {
+            for (int j = 0; j < n; ++j) {
+                int temp = matrix[i][j];
+                matrix[i][j] = matrix[n - i - 1][j];
+                matrix[n - i - 1][j] = temp;
+            }
+        }
+        // 主对角线翻转
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < i; ++j) {
+                int temp = matrix[i][j];
+                matrix[i][j] = matrix[j][i];
+                matrix[j][i] = temp;
+            }
+        }
+    }
+}
+
+    ```
+    - 由  matrix[i][j] = matrix[j][n-i-1];得到
+      - 先水平翻转 matrix[i][j] = matrix[n - i - 1][j];
+      - 再主对角线翻转 matrix[n-i-1][j] = matrix[j][n-i-1];
+- 搜索二维矩阵
+  #image("Screenshot_20250928_204704.png")
+  - 每行二分
+  - Z型查找
+    ```java
+    class Solution {
+    public boolean searchMatrix(int[][] matrix, int target) {
+        if (matrix == null || matrix.length == 0 || matrix[0].length == 0) {
+            return false;
+        }
+        int m = matrix.length, n = matrix[0].length;
+        int row = 0, col = n - 1;
+        while (row < m && col >= 0) {
+            if (matrix[row][col] == target) {
+                return true;
+            } else if (matrix[row][col] > target) {
+                col--;
+            } else {
+                row++;
+            }
+        }
+        return false;
+    }
+}
+    ```
+    - 从右上角开始查找
+    - 如果当前元素等于目标值，返回 true
+    - 如果当前元素大于目标值，说明目标值不在当前列，列索引左移
+    - 如果当前元素小于目标值，说明目标值不在当前行，行索引下移
+    - 重复上述过程，直到找到目标值或者索引越界
+ 
