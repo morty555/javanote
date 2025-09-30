@@ -1,0 +1,118 @@
+= linux命令面试题
+- Linux的常用命令了解过哪些？
+  - 文件相关(mv mkdir cd ls)
+  - 进程相关( ps top netstat )
+    - ps
+      - ps 当前shell下的进程
+      - ps -e或者ps -A显示所有进程
+      - ps -f显示进程的详细信息
+      - ps -ef显示所有进程的详细信息
+      - ps axjf树型显示进程
+    - netstat
+      - netstat -a显示所有 TCP/UDP 监听和非监听 的连接。随着时间的推移，连接状态会发生变化。
+      - netstat -l显示所有正在监听的套接字。只有该时刻正在监听的套接字才会显示出来。不会变化。
+      - netstat -tulnp显示所有正在监听的TCP和UDP端口及其对应的进程信息。
+    - ss和netstat一样的功能，但是ss比netstat更快更强大。
+
+  - 权限相关(chmod chown useradd groupadd)
+    - chmod
+      - 修改文件权限
+      - chmod u+x file.txt     给文件所有者增加执行权限
+      - chmod g-w file.txt     去掉用户组的写权限
+      - chmod o=r file.txt     把其他用户的权限设为只读
+      - chmod a+x run.sh       所有人增加执行权限
+      #image("Screenshot_20250930_112007.png")
+    - chown
+      - 修改文件所有者
+      - chown user file.txt    把file.txt的所有者改为user
+      - chown user:group file.txt  把file.txt的所有者改为user，用户组改为group
+      - chown -R user dir/     递归修改dir目录下所有文件和子目录的所有者为user
+      #image("Screenshot_20250930_111709.png")
+    - useradd
+      - 创建新用户
+      - useradd username       创建一个名为username的新用户
+      - useradd -m username    创建用户并创建home目录
+      - useradd -s /bin/bash username  指定用户的登录shell为bash
+    - groupadd
+      - 创建新用户组
+      - groupadd groupname     创建一个名为groupname的新用户组
+
+
+  - 网络相关(netstat ip addr)
+  - 测试相关(测试网络连通性:ping 测试端口连通性:telnet)
+
+- ps命令里都有哪些选项，ps展示哪些东西？
+  - ps命令展示内容：
+    - PID：进程ID。
+    - PPID：父进程ID
+    - USER：进程所属用户
+    - %CPU：进程使用的CPU百分比
+    - %MEM：进程使用的内存百分比
+    - VSZ：进程使用的虚拟内存大小（以KB为单位）
+    - RSS：进程使用的实际内存大小（以KB为单位）
+    - TTY：进程关联的终端
+    - STAT：进程状态
+    - START：进程启动时间
+    - TIME：进程使用的CPU时间
+    - COMMAND：启动进程的命令及其参数
+  - ps命令选项：
+    - ps -e 或 ps -A：显示所有进程。
+    - ps -f：显示进程的完整格式信息。
+    - ps -u username：显示指定用户的进程。
+    - ps -p pid：显示指定PID的进程信息。
+    - ps aux：显示所有进程的详细信息，包括其他用户的进程。
+    - ps axjf：以树形结构显示进程，便于查看父子关系。
+    - ps -o format：自定义输出格式，例如ps -o pid,cmd显示PID和命令。
+    - ps --sort：按指定字段排序输出，例如ps --sort=-%mem按内存使用率降序排序。
+    - ps -C command：显示指定命令的进程信息。
+    - ps -l：显示长格式的进程信息。
+    - ps -H：以层次结构显示进程。
+    - ps -N：显示不匹配指定条件的进程。
+    - ps -L：显示线程信息。
+    - ps -T：显示与当前终端相关的所有进程。
+    - ps -j：显示作业信息。
+    - ps -x：显示没有控制终端的进程。
+    - ps -c：显示进程的简短命令名。
+    - ps -m：显示内存使用情况。
+    - ps -r：只显示正在运行的进程。
+    - ps -s：显示进程的累积时间。
+    - ps -V：显示ps命令的版本信息。
+    - ps --help：显示帮助信息。
+- top命令会展示什么东西，里面每一项都是呈现什么样的数据？
+  - Load average（平均负载）：显示系统在最近1分钟、5分钟和15分钟内的平均负载情况。
+  - TASK（任务）：显示当前系统中的任务信息，包括运行中的任务、睡眠中的任务等。
+  - CPU（中央处理器）：显示CPU的使用情况，包括用户态、系统态、空闲态等。
+  - MEM（内存）：显示系统内存的使用情况，包括总内存、已用内存、空闲内存等。
+  - SWAP（交换空间）：显示交换空间的使用情况。
+  - 进程列表
+    - PID（进程ID）：显示进程的唯一标识符。
+    - USER（用户）：显示进程所属的用户。
+    - PR（优先级）：显示进程的优先级。
+    - NI（优先级调整值）：显示进程的优先级调整值。
+    - VIRT（虚拟内存）：显示进程使用的虚拟内存大小。
+    - RES（常驻内存）：显示进程使用的常驻内存大小。
+    - SHR（共享内存）：显示进程使用的共享内存大小。
+    - S（状态）：显示进程的当前状态，如运行、睡眠等。
+    - %CPU（CPU使用率）：显示进程使用的CPU百分比。
+    - %MEM（内存使用率）：显示进程使用的内存百分比。
+    - TIME+（累计CPU时间）：显示进程使用的累计CPU时间。
+    - COMMAND（命令）：显示启动进程的命令及其参数。
+- 已知一个进程名，如何杀掉这个进程？
+  - 在Linux 操作系统，可以使用kill命令来杀死进程。
+  - 首先，使用ps命令查找进程的PID（进程ID），然后使用kill命令加上PID来终止进程。
+- linux 如何查看进程状态？
+  - 可以通过 ps 命令或者 top 命令来查看进程的状态。
+- linux 如何查看线程状态？
+  - 在 ps 和 top 命令加一下参数，就能看到线程状态了
+- 怎么查看哪个端口被哪个进程占用？
+  - 可以通过 lsof 或者 netstate 命令查看，比如查看 80 端口。
+- 端口通不通用什么命令？
+  - 第一种方式：telnet：telnet命令用于建立与远程主机的Telnet连接，并可以使用telnet命令测试特定端口的可访问性。
+    - 示例：telnet IP地址 端口号 用于测试指定IP地址上的指定端口是否可访问。如果能够建立连接，则表示端口通畅；如果连接失败或超时，则表示端口不可访问。
+  - 第二种方式：nc：nc命令（也称为netcat）是一个网络工具，可以用于创建各种类型的网络连接，包括测试端口的可访问性。
+    - 示例：nc -zv IP地址 端口号 用于测试指定IP地址上的指定端口是否可访问。如果能够成功连接，则表示端口通畅；如果连接失败或拒绝，则表示端口不可访问。
+- top 命令查看是多少个 CPU 核心？
+  - 执行 top 命令之后，按数字 1，就能显示 CPU 有多少个核心了。
+- top 命令和 free 命令都可以查看内存，有什么区别？
+  - free 命令主要是查看系统的内存使用情况
+- 用shell命令替换一个文件中的字符串

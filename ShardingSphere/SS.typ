@@ -12,3 +12,13 @@
   - Sharding-JDBC：这是一个轻量级的 Java 框架，它以 Jar 包的形式存在，直接嵌入到 Java 应用程序中，是增强版的 JDBC 驱动 。其核心优势在于零侵入式，应用程序可以像使用普通 JDBC 一样使用 Sharding-JDBC，对业务代码的侵入性极小，能够完全兼容 JDBC 和各种 ORM 框架，如 Hibernate、MyBatis 等。例如，在一个基于 Spring Boot 和 MyBatis 的电商项目中，只需简单地引入 Sharding-JDBC 的依赖，并进行相应的配置，就可以轻松实现分库分表和读写分离，而无需对原有的数据库访问代码进行大规模的修改。
   - Sharding-Proxy：Sharding-Proxy 是一个独立的数据库代理层，它对外暴露数据库协议，如 MySQL、PostgreSQL 协议，应用程序可以像连接普通数据库一样连接 Sharding-Proxy。它的主要特点是对异构语言的支持，无论应用程序使用何种编程语言开发，只要能连接数据库，就可以使用 Sharding-Proxy 实现分布式数据库的功能。对于一些使用 Python、Node.js 等语言开发的项目，通过连接 Sharding-Proxy，就能够享受到分库分表、读写分离等功能，而无需在应用程序中集成特定的分布式数据库框架。
   - Sharding-Sidecar：Sharding-Sidecar（现已重命名为 ShardingSphere-Agent）是面向云原生环境的解决方案，它基于 Kubernetes 等容器编排平台，以 Sidecar 模式与应用容器部署在一起。这种部署方式使得它能够充分利用容器化的优势，如资源隔离、弹性伸缩等，为云原生应用提供了便捷的分布式数据库治理能力。在一个基于 Kubernetes 的微服务架构中，每个微服务容器都可以部署一个 Sharding-Sidecar，实现对该微服务所使用数据库的分片和治理，同时通过 Kubernetes 的服务发现和负载均衡机制，实现对多个 Sharding-Sidecar 的统一管理和调度。
+- 快速入门
+  - JDBC
+    - 规则配置
+    - 导入maven依赖
+    - 创建YAML配置文件
+    - 代码示例
+  - Sharding-Proxy 
+    - 使用限制
+      - ShardingSphere-Proxy 对系统库/表（如 information_schema、pg_catalog）支持有限，通过部分图形化数据库客户端连接 Proxy 时，可能客户端或 Proxy 会有错误提示。可以使用命令行客户端（mysql、psql、gsql 等）连接 Proxy 验证功能。
+  - 
