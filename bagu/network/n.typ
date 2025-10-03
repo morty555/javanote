@@ -101,8 +101,10 @@
       - 假如客户端下载了其中512K时候网络突然断开了，过了一会网络可以了，客户端再下载时候，需要在HTTP头中申明本次需要续传的片段：Range:bytes=512000-这个头通知服务端从文件的512K位置开始传输文件，直到文件内容结束
       - 服务端收到断点续传请求，从文件的512K位置开始传输，并且在HTTP头中增加：Content-Range:bytes 512000-/1024000,Content-Length: 512000。并且此时服务端返回的HTTP状态码应该是206 Partial Content。如果客户端传递过来的Range超过资源的大小,则响应416 Requested Range Not Satisfiable
     - 通过上面流程可以看出：断点续传中4个HTTP头不可少的，分别是Range头、Content-Range头、Accept-Ranges头、Content-Length头。其中第一个Range头是客户端发过来的，后面3个头需要服务端发送给客户端。下面是它们的说明：
-      - Accept-Ranges: bytes：这个值声明了可被接受的每一个范围请求, 大多数情况下是字节数 bytes
-      - Range: bytes=开始位置-结束位置：Range是浏览器告知服务器所需分部分内容范围的消息头。
+      - Accept-Ranges: bytes：这个值声明了可被接受的每一个范围请求, 大多数情况下是字节数 bytes，服务端 声明能力（是否支持分块下载）。
+      - Range: bytes=开始位置-结束位置：Range是浏览器告知服务器所需分部分内容范围的消息头。客户端 发起分块请求。
+      - Content-Length → 服务端 告知本次返回的数据长度。
+      - Content-Range → 服务端 告知实际返回的范围。 HTTP 协议中，Content-Length 的含义是 本次响应体/请求体的字节数。所以它出现在 请求端和响应端
   - http为什么不安全
     - HTTP 由于是明文传输，所以安全上存在以下三个风险：
       - 窃听风险，比如通信链路上可以获取通信内容，用户号容易没。
