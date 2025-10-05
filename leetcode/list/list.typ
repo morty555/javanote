@@ -153,3 +153,92 @@
     - 初始化slow和fast不要初始在同一个位置，会跳过while循环
     - 对head和head.next要判断，针对空链表和只有一个节点的链表
     - 在while循环中，要先判断fast和fast.next是否为null，否则会空指针异常
+- 环形链表2
+  #image("Screenshot_20251004_230132.png")
+  - 相比于环形链表，需要找到环的交点处
+  ```java
+  public class Solution {
+    public ListNode detectCycle(ListNode head) {
+        if (head == null) {
+            return null;
+        }
+        ListNode slow = head, fast = head;
+        while (fast != null) {
+            slow = slow.next;
+            if (fast.next != null) {
+                fast = fast.next.next;
+            } else {
+                return null;
+            }
+            if (fast == slow) {
+                ListNode ptr = head;
+                while (ptr != slow) {
+                    ptr = ptr.next;
+                    slow = slow.next;
+                }
+                return ptr;
+            }
+        }
+        return null;
+    }
+}
+
+  ```
+  - 找到的思路和环形链表相似，利用快慢指针找到，但是这里同时从head开始，因为后续查找环交点需要快慢指针的路径关系
+  - 因为同起点，快指针是慢指针路径的两倍
+  #image("Screenshot_20251004_230343.png")
+  - 我们假设慢指针走了a+b的路径长，那么因为环形存在，快指针一定也走了a+b+n个环长也就是 a+n(b+c)+b=a+(n+1)b+nc。
+  - 又因为两倍关系 有 a+(n+1)b+nc=2(a+b)⟹a=c+(n−1)(b+c)
+  - 因此我们可以知道头节点到环节点的距离，就是快慢指针交汇处到环节点再走n-1个环长
+  - 也就是说，在快慢指针交汇处，我们用一个节点引用头节点的话，这个节点到环交点的时候，慢节点就也刚好到环节点，因此根据慢指针是否与该指针对应节点相同找到环交点
+
+- 合并有序数组
+  #image("Screenshot_20251005_211109.png")
+  - 递归
+    ```java
+    class Solution {
+        public ListNode mergeTwoLists(ListNode l1, ListNode l2) {
+            if (l1 == null) {
+                return l2;
+            } else if (l2 == null) {
+                return l1;
+            } else if (l1.val < l2.val) {
+                l1.next = mergeTwoLists(l1.next, l2);
+                return l1;
+            } else {
+                l2.next = mergeTwoLists(l1, l2.next);
+                return l2;
+            }
+        }
+    }
+
+    ```
+    - 每次只找一个最小节点，然后将两个链表剩下的递归
+  - 迭代
+    ```java
+    class Solution {
+    public ListNode mergeTwoLists(ListNode l1, ListNode l2) {
+        ListNode prehead = new ListNode(-1);
+
+        ListNode prev = prehead;
+        while (l1 != null && l2 != null) {
+            if (l1.val <= l2.val) {
+                prev.next = l1;
+                l1 = l1.next;
+            } else {
+                prev.next = l2;
+                l2 = l2.next;
+            }
+            prev = prev.next;
+        }
+
+        // 合并后 l1 和 l2 最多只有一个还未被合并完，我们直接将链表末尾指向未合并完的链表即可
+        prev.next = l1 == null ? l2 : l1;
+
+        return prehead.next;
+    }
+}
+    ```
+    - 创建一个前驱节点方便第一次遍历的时候插入和后续头节点查找
+    - 每次只比较两个链表的第一个元素，谁小就插入到prev的后面，直到一个链表处理完，再把剩余链表接到prev后
+    
