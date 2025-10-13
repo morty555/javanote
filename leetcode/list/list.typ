@@ -625,3 +625,192 @@ class Solution {
     - 每两段merge一次，返回merge后的链表的头节点，插入到pre后
     - 也就是每两组链表排序后合并成一个链表后接到pre后
     - 记住while循环，因为一条链表中，当小段长度小的时候，一条链表会有很多个小段，但是我们每次只处理两个小段的merge,因此要whlie判断curr是否到达tail
+
+
+
+- 合并 K 个升序链表
+  #image("Screenshot_20251013_104619.png")
+  - 顺序合并
+    - 顺序合并n-1次
+  - 分治合并
+    - 每次合并一半
+    - mergesort
+    ```java
+        class Solution {
+        public ListNode mergeKLists(ListNode[] lists) {
+            return merge(lists, 0, lists.length - 1);
+        }
+
+        public ListNode merge(ListNode[] lists, int l, int r) {
+            if (l == r) {
+                return lists[l];
+            }
+            if (l > r) {
+                return null;
+            }
+            int mid = (l + r) >> 1;
+            return mergeTwoLists(merge(lists, l, mid), merge(lists, mid + 1, r));
+        }
+
+        public ListNode mergeTwoLists(ListNode a, ListNode b) {
+            if (a == null || b == null) {
+                return a != null ? a : b;
+            }
+            ListNode head = new ListNode(0);
+            ListNode tail = head, aPtr = a, bPtr = b;
+            while (aPtr != null && bPtr != null) {
+                if (aPtr.val < bPtr.val) {
+                    tail.next = aPtr;
+                    aPtr = aPtr.next;
+                } else {
+                    tail.next = bPtr;
+                    bPtr = bPtr.next;
+                }
+                tail = tail.next;
+            }
+            tail.next = (aPtr != null ? aPtr : bPtr);
+            return head.next;
+        }
+    }
+
+    ```
+    - 优先队列
+      ```java
+        class Solution {
+    class Status implements Comparable<Status> {
+        int val;
+        ListNode ptr;
+
+        Status(int val, ListNode ptr) {
+            this.val = val;
+            this.ptr = ptr;
+        }
+
+        public int compareTo(Status status2) {
+            return this.val - status2.val;
+        }
+    }
+
+    PriorityQueue<Status> queue = new PriorityQueue<Status>();
+
+    public ListNode mergeKLists(ListNode[] lists) {
+        for (ListNode node: lists) {
+            if (node != null) {
+                queue.offer(new Status(node.val, node));
+            }
+        }
+        ListNode head = new ListNode(0);
+        ListNode tail = head;
+        while (!queue.isEmpty()) {
+            Status f = queue.poll();
+            tail.next = f.ptr;
+            tail = tail.next;
+            if (f.ptr.next != null) {
+                queue.offer(new Status(f.ptr.next.val, f.ptr.next));
+            }
+        }
+        return head.next;
+    }
+}
+      ```
+      - 维护每个链表的头节点
+        - 自定义类使用优先队列需要实现comparable接口
+        - 哑节点
+        - queue存储每个链表的最小值所在的节点
+        - 每次poll拿到最小值接到tail.next
+        - 用最小值节点.next更新queue
+
+- LRU缓存 
+  #image("Screenshot_20251013_222426.png")
+    - 哈希表+双向链表
+  ```java
+
+  public class LRUCache {
+    class DLinkedNode {
+        int key;
+        int value;
+        DLinkedNode prev;
+        DLinkedNode next;
+        public DLinkedNode() {}
+        public DLinkedNode(int _key, int _value) {key = _key; value = _value;}
+    }
+
+    private Map<Integer, DLinkedNode> cache = new HashMap<Integer, DLinkedNode>();
+    private int size;
+    private int capacity;
+    private DLinkedNode head, tail;
+
+    public LRUCache(int capacity) {
+        this.size = 0;
+        this.capacity = capacity;
+        // 使用伪头部和伪尾部节点
+        head = new DLinkedNode();
+        tail = new DLinkedNode();
+        head.next = tail;
+        tail.prev = head;
+    }
+
+    public int get(int key) {
+        DLinkedNode node = cache.get(key);
+        if (node == null) {
+            return -1;
+        }
+        // 如果 key 存在，先通过哈希表定位，再移到头部
+        moveToHead(node);
+        return node.value;
+    }
+
+    public void put(int key, int value) {
+        DLinkedNode node = cache.get(key);
+        if (node == null) {
+            // 如果 key 不存在，创建一个新的节点
+            DLinkedNode newNode = new DLinkedNode(key, value);
+            // 添加进哈希表
+            cache.put(key, newNode);
+            // 添加至双向链表的头部
+            addToHead(newNode);
+            ++size;
+            if (size > capacity) {
+                // 如果超出容量，删除双向链表的尾部节点
+                DLinkedNode tail = removeTail();
+                // 删除哈希表中对应的项
+                cache.remove(tail.key);
+                --size;
+            }
+        }
+        else {
+            // 如果 key 存在，先通过哈希表定位，再修改 value，并移到头部
+            node.value = value;
+            moveToHead(node);
+        }
+    }
+
+    private void addToHead(DLinkedNode node) {
+        node.prev = head;
+        node.next = head.next;
+        head.next.prev = node;
+        head.next = node;
+    }
+
+    private void removeNode(DLinkedNode node) {
+        node.prev.next = node.next;
+        node.next.prev = node.prev;
+    }
+
+    private void moveToHead(DLinkedNode node) {
+        removeNode(node);
+        addToHead(node);
+    }
+
+    private DLinkedNode removeTail() {
+        DLinkedNode res = tail.prev;
+        removeNode(res);
+        return res;
+    }
+}
+
+  ```
+  - 哈希表中存储的是双向链表的节点
+  - 这样可以直接根据key找到节点，然后移动节点
+  - 注意get可能get到空节点，因为key不一定在hashmap存在
+  - 添加新的key和valkue时，注意超出容量，超出容量要删除尾节点，同时将尾节点对应在cache里删掉
