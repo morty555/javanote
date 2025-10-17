@@ -74,6 +74,45 @@
         - RocketMQ 
         - Kafka 
 
+- Kafka为什么高可用高可靠
+  - 高可用主要指 服务不中断。即使部分 Broker 宕机，Kafka 集群仍能继续对外提供服务。
+    - 分区副本机制
+      - 每个topic分多个分区
+      - 每个分区都有多个 副本（replica），一个为 Leader，其他为 Follower。
+      - 数据写入和读取都是通过 Leader 完成，Follower 只做同步。
+      - 当某个 Broker 宕机时：
+        - 该 Broker 上的分区 Leader 不可用；
+        - Kafka 会自动从剩余的副本中 选举一个新的 Leader；
+        - 客户端自动重定向到新的 Leader，服务不中断。
+    - Controller 节点选举
+      - controller节点负责
+        - 监控 Broker 状态；
+        - 触发副本重新分配；
+        - leader重选
+    - 客户端自动感知
+      - Kafka Producer、Consumer 都支持：
+        - 自动感知分区 Leader 变更；
+        - 自动重连机制
+        - 元数据刷新。
+  - 高可靠指 数据不丢失、不重复、顺序一致。
+    - 多副本同步
+      - Kafka 的副本同步机制保证：
+        - Leader 负责写入；
+        - Follower 从 Leader 拉取数据；
+        - 当 ISR（In-Sync Replicas）集合 内所有副本都同步成功后，才算“提交”成功。
+    - 持久化日志（顺序写 + PageCache）
+      - Kafka 将消息写入 磁盘日志文件（commit log），并且是顺序写入：
+        - 顺序写速度接近内存；
+        - 依赖操作系统 PageCache，提高读写性能；
+        - 重启或宕机后数据仍可从磁盘恢复。
+    -  ACK 机制（生产者确认）
+      #image("Screenshot_20251014_200713.png")
+    - Min In-Sync Replicas（最小同步副本数）
+      - min.insync.replicas = 2即必须至少有 2 个副本在 ISR 集合中同步成功，否则拒绝写入。
+    - 消费者位移持久化（Offset Commit）
+      - 消费者消费进度（offset）会写入 Kafka 内部主题 __consumer_offsets；
+      - 同样有副本机制；
+      - 即使消费者或 Broker 宕机，也能恢复到正确位置。
 
   - 既然rabbitmq的时效性没那么重要，为什么还要选择
     - 轻量，上手快、集成方便
@@ -247,4 +286,21 @@
     - 对于这种情况，一般采用几种解决方案
       - 分布式锁，每次扣减都要先拿到锁，这样效率慢
       - lua脚本，将多个redis操作用lua脚本保证原子性，该操作性能较优
+
+- 你知道本地缓存可以用那个谷歌的guava cache吧，这二者有什么区别，为什么用caffeine，它解决了guava的什么问题？
+  #image("Screenshot_20251015_155334.png")  
+  - 传统 LRU（最近最少使用）策略存在几个问题：
+    - 缓存抖动（Cache Pollution）
+      - 突然出现的大量一次性访问数据会把热数据挤出缓存。例如：一次性扫描 100 万条新数据，LRU 会把原本频繁访问的小数据全部踢掉。
+    - 命中率不够高。LRU 只考虑最近访问时间，不考虑访问频率。
+  - Window-TinyLFU 核心思想
+    - Window 部分（新数据区）
+      - 缓存的一小部分（比如 1/32）用于存放 最新访问的条目。
+      - 保证新进入的数据有机会被缓存
+    - Main 部分（主缓存区）
+      - 大部分缓存用于存放 频繁访问的老数据。
+      - 使用 TinyLFU 策略判断是否应该保留或淘汰。
+        - TinyLFU
+          - 是一个 频率过滤器（Frequency Filter），基于 计数最小化算法（Count-Min Sketch），记录每个 key 的访问频率。
+          - 当一个新条目要进入 Main 区时，算法会比较它的访问频率和 Main 区里最不常用条目的频率：如果新条目访问频率高于被替换条目，则替换。否则被淘汰
 
