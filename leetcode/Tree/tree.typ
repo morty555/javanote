@@ -203,3 +203,69 @@
   - 对每个节点都判断左子树+右子树的深度和
   - 用额外全局变量ans记录当前节点最大路径的节点数，也就是该节点左子树最大深度+右子树最大深度+1
   - depth的返回值记录以该节点为根的深度最大值，根据递归每层都计算出每个节点的深度最大值。
+
+- 二叉树的层序遍历
+  #image("Screenshot_20251018_102733.png")
+  ```java
+  class Solution {
+    public List<List<Integer>> levelOrder(TreeNode root) {
+        List<List<Integer>> ret = new ArrayList<List<Integer>>();
+        if (root == null) {
+            return ret;
+        }
+
+        Queue<TreeNode> queue = new LinkedList<TreeNode>();
+        queue.offer(root);
+        while (!queue.isEmpty()) {
+            List<Integer> level = new ArrayList<Integer>();
+            int currentLevelSize = queue.size();
+            for (int i = 1; i <= currentLevelSize; ++i) {
+                TreeNode node = queue.poll();
+                level.add(node.val);
+                if (node.left != null) {
+                    queue.offer(node.left);
+                }
+                if (node.right != null) {
+                    queue.offer(node.right);
+                }
+            }
+            ret.add(level);
+        }
+        
+        return ret;
+    }
+}
+    ```
+    - 每次将一层的节点放入queue中
+    - 读出来然后加入到level数组里
+    - 每次for循环遍历完就将level数组加入res
+    - 注意，不能将null放入queue,如果到最后一层为空，而把null添加到queue中的话，最后一层会生成空level导致错误
+    - 一定要用queue,不能用list之类的，queue实现了poll和offer,可以实现先进先出，而list的remove和get要index
+    - 也可以用用deque接收arrayDeque
+
+- 将有序数组转换为二叉搜索树
+  #image("Screenshot_20251018_104434.png")
+  ```java 
+  class Solution {
+    public TreeNode sortedArrayToBST(int[] nums) {
+        return helper(nums, 0, nums.length - 1);
+    }
+
+    public TreeNode helper(int[] nums, int left, int right) {
+        if (left > right) {
+            return null;
+        }
+
+        // 总是选择中间位置左边的数字作为根节点
+        int mid = (left + right) / 2;
+
+        TreeNode root = new TreeNode(nums[mid]);
+        root.left = helper(nums, left, mid - 1);
+        root.right = helper(nums, mid + 1, right);
+        return root;
+    }
+}
+
+  ```
+  - 不一定要选mid左边的为root,mid右的也可以
+
