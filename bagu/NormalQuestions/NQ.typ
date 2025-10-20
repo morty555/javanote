@@ -106,6 +106,19 @@
   - concurrenthashmap，效率高
   - sychronized，效率慢
     
+
+
+ - Java的锁有哪些
+      - 内置锁（Synchronized）
+      - 显式锁（ReentrantLock）
+      - 读写锁（ReadWriteLock）
+      - 偏向锁 / 轻量级锁 / 重量级锁/ 自旋锁（JVM 层优化）
+      - 乐观锁/CAS
+      - 其他锁机制
+        - StampedLock
+        - Semaphore：
+        - CountDownLatch / CyclicBarrier / Phaser：
+  
 - synchronized原理 
   - synchronized是基于原子性的内部锁机制，是可重入的，因此在一个线程调用synchronized方法的同时在其方法体内部调用该对象另一个synchronized方法，也就是说一个线程得到一个对象锁后再次请求该对象锁，是允许的，这就是synchronized的可重入性。
     - synchronized底层是利用计算机系统mutex Lock实现的。每一个可重入锁都会关联一个线程ID和一个锁状态status。
@@ -132,6 +145,27 @@
     - 原理接近 ConcurrentHashMap 1.7 的 “Segment” 分段锁。
   - 消息队列写
   - 使用 ThreadLocal + 合并机制。让每个线程维护自己的本地副本，最后再合并。
+
+- ConcurrentHashMap底层
+  - 在 JDK 1.7 中它使用的是数组加链表的形式实现的，而数组又分为：大数组 Segment 和小数组 HashEntry。 Segment 是一种可重入锁（ReentrantLock），在 ConcurrentHashMap 里扮演锁的角色；HashEntry 则用于存储键值对数据。一个 ConcurrentHashMap 里包含一个 Segment 数组，一个 Segment 里包含一个 HashEntry 数组，每个 HashEntry 是一个链表结构的元素。
+  - 在 JDK 1.7 中，ConcurrentHashMap 虽然是线程安全的，但因为它的底层实现是数组 + 链表的形式，所以在数据比较多的情况下访问是很慢的，因为要遍历整个链表，而 JDK 1.8 则使用了数组 + 链表/红黑树的方式优化了 ConcurrentHashMap 的实现
+  - JDK 1.8 ConcurrentHashMap JDK 1.8 ConcurrentHashMap 主要通过 volatile + CAS 或者 synchronized 来实现的线程安全的。添加元素时首先会判断容器是否为空：
+    - 如果为空则使用 volatile 加 CAS 来初始化
+    - 如果容器不为空，则根据存储的元素计算该位置是否为空。 
+      - 如果根据存储的元素计算结果为空，则利用 CAS 设置该节点；
+      - 如果根据存储的元素计算结果不为空，则使用 synchronized ，然后，遍历桶中的数据，并替换或新增节点到桶中，最后再判断是否需要转为红黑树，这样就能保证并发访问时的线程安全了。
+  - 如果把上面的执行用一句话归纳的话，就相当于是ConcurrentHashMap通过对头结点加锁来保证线程安全的，锁的粒度相比 Segment 来说更小了，发生冲突和加锁的频率降低了，并发操作的性能就提高了。
+  - 而且 JDK 1.8 使用的是红黑树优化了之前的固定链表，那么当数据量比较大的时候，查询性能也得到了很大的提升，从之前的 O(n) 优化到了 O(logn) 的时间复杂度。
+  - 分段锁怎么加锁的？
+    - 在 ConcurrentHashMap 中，对于插入、更新、删除等操作，需要先定位到具体的 Segment，然后再在该 Segment 上加锁，而不是像传统的 HashMap 一样对整个数据结构加锁。这样可以使得不同 Segment 之间的操作并行进行，提高了并发性能。
+    
+  - 分段锁是可重入的吗？
+    - JDK 1.7 ConcurrentHashMap中的分段锁是用了 ReentrantLock，是一个可重入的锁。
+  
+  - 已经用了synchronized，为什么还要用CAS呢
+    - ConcurrentHashMap使用这两种手段来保证线程安全主要是一种权衡的考虑，在某些操作中使用synchronized，还是使用CAS，主要是根据锁竞争程度来判断的。
+    - 比如：在putVal中，如果计算出来的hash槽没有存放元素，那么就可以直接使用CAS来进行设置值，这是因为在设置元素的时候，因为hash值经过了各种扰动后，造成hash碰撞的几率较低，那么我们可以预测使用较少的自旋来完成具体的hash落槽操作。
+    - 当发生了hash碰撞的时候说明容量不够用了或者已经有大量线程访问了，因此这时候使用synchronized来处理hash碰撞比CAS效率要高，因为发生了hash碰撞大概率来说是线程竞争比较强烈。
 
 - sychronized和reentrantlock
   #image("Screenshot_20251014_201712.png")
@@ -337,6 +371,16 @@
   - CPU 密集型任务 	核心线程数 = CPU 核数 + 1
   - IO 密集型任务 	核心线程数 = 2 × CPU 核数
 
+- Java常用线程池哪些？
+  - 线程池的核心类：ThreadPoolExecutor,所有线程池的本质都是这个类：
+  - 常用线程池类型（Executors 工厂方法）
+    - 固定线程数线程池，固定 n 个核心线程，任务多时排队等待
+    - 单线程线程池，只有一个线程，顺序执行任务
+    - 缓存线程池，线程数不固定，可自动回收空闲线程
+    - 定时任务线程池，定时或周期性任务执行
+    - 单线程定时任务池，单线程版本的定时线程池
+  - 自定义线程池（推荐方式）阿里巴巴《Java开发手册》不建议直接使用 Executors 创建线程池，因为容易出现 资源耗尽（OOM） 风险
+
 
 - JVM内存模型
   - JVM的内存结构主要分为以下几个部分：
@@ -469,6 +513,12 @@
     - 若不清理，会导致 value 无法访问但还在内存中 → 内存泄漏。
   - 因此ThreadLocalMap 有自清理机制：
     - 在每次 set() 或 get() 时，ThreadLocalMap 会自动清理那些key == null 的 Entry；也就是 ThreadLocal 已经被 GC 掉的项。
+
+
+
+- redis的stream和MQ的区别
+  #image("Screenshot_20251020_195146.png")
+  #image("Screenshot_20251020_195233.png")
 
 - redis怎么从成本或者使用上优化 
   - 减少内存占用
@@ -710,9 +760,9 @@
   #image("Screenshot_20251015_145233.png")
   #image("Screenshot_20251015_145303.png")
 
-- io多路复用 SELECT和EPOLL
+- io多路复用 SELECT和EPOLL和POLL
   - #image("Screenshot_20251015_145638.png")
-  - select 每次调用都要遍历整个 FD 集合，即使只有一个就绪。
+  - select 每次调用都要遍历整个 FD 集合，即使只有一个就绪。select 使用固定大小的位图（通常 FD_SETSIZE = 1024），超过就不行；
   - epoll 由内核事件回调机制维护就绪队列，只返回活跃的 FD。
 
   - epoll底层 
@@ -721,8 +771,12 @@
     - 事件触发时直接放入 ready list，不需要扫描全部 FD
     - 回调机制触发由内核事件驱动而非轮询
     - 一次注册、持续监听
+  - poll 相比 select 的改进
+    - poll 使用一个可变长的数组 pollfd[]，数量只受系统内存限制。不再受 FD 数量限制
+    - poll 的 events 支持更精细的事件，如 POLLIN, POLLOUT, POLLERR, POLLHUP 等，比 select 的 read/write/exception 更灵活。
 
-- -  TCP三次握手过程说一下？
+
+- TCP三次握手过程说一下？
   - 一开始，客户端和服务端都处于 CLOSE 状态。先是服务端主动监听某个端口，处于 LISTEN 状态
   - 客户端会随机初始化序号（client_isn），将此序号置于 TCP 首部的「序号」字段中，同时把 SYN 标志位置为 1，表示 SYN 报文。接着把第一个 SYN 报文发送给服务端，表示向服务端发起连接，该报文不包含应用层数据，之后客户端处于 SYN-SENT 状态。
   - 服务端收到客户端的 SYN 报文后，首先服务端也随机初始化自己的序号（server_isn），将此序号填入 TCP 首部的「序号」字段中，其次把 TCP 首部的「确认应答号」字段填入 client_isn + 1, 接着把 SYN 和 ACK 标志位置为 1。最后把该报文发给客户端，该报文也不包含应用层数据，之后服务端处于 SYN-RCVD 状态。
@@ -790,6 +844,22 @@
     - 与微服务体系兼容良好
 
 
+- 介绍MySQL事务？
+  + 事务的定义
+    - 事务（Transaction） 是一组操作的逻辑单元，这些操作要么全部执行成功，要么在发生错误时全部回滚（撤销）。
+  + 事务的四大特性（ACID）
+    - 原子性
+    - 一致性
+    - 隔离性
+    - 持久性
+  + 事务的隔离级别
+  + 事务实现原理
+    - Redo Log 持久性
+    - undo log 原子性
+    - MVCC 可重复读和并发性能
+    - 锁机制（行锁/间隙锁）保证隔离性
+
+
 - MySQL事务隔离级别？分别解决什么问题？
   - 读未提交
   - 读可提交
@@ -842,3 +912,24 @@
 - 聚簇索引和非聚簇索引
   - 聚簇索引：通常是 B+ 树叶子节点存储实际数据行。查询主键数据直接命中叶子节点，无需再回表。
   - 非聚簇索引：B+ 树叶子节点只存 索引列 + 指向数据行的地址（InnoDB 是主键，MyISAM 是物理行地址）。查询非主键列时，需要先查索引，再根据 rowid 回表取数据。
+
+
+
+
+- 程序申请100字节的内存，操作系统是马上拿出100字节的内存吗？
+  - malloc 只是向操作系统申请“虚拟内存地址空间”
+  - 操作系统只是在页表中登记了这块地址空间属于该进程，但并没有真正分配物理内存页。
+  - 真正的物理内存在以下时机才会被分配：
+    - 当程序第一次访问（读/写）那块虚拟地址空间时，CPU 触发缺页异常（page fault）；
+      - 缺页异常
+        - 如果页表项中发现该页不存在（没有分配物理页），或者在磁盘上（被换出去了），或者权限不匹配（只读页被写入）
+      - 缺页异常处理的详细步骤
+        - CPU 发现页表无效
+        - 内核判断缺页原因
+        #image("Screenshot_20251020_201239.png")
+        - 如果合法 → 分配/加载物理页
+        - 恢复执行
+    - 操作系统捕获异常后，才会从物理内存（或交换区）中分配实际的页（通常4KB一页）；
+    - 然后更新页表，使这块虚拟地址指向真实的物理页。
+  - 操作系统以 页（page） 为最小分配单位（通常一页=4KB）。
+  - 所以实际上你“只用了100字节”，但系统给了你4096字节的物理内存。

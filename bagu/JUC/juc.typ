@@ -332,6 +332,7 @@ class BlockingQueueExample {
       - CyclicBarrier：CyclicBarrier 允许一组线程互相等待，直到到达一个公共的屏障点。当所有线程都到达这个屏障点后，它们可以继续执行后续操作，并且这个屏障可以被重置循环使用。与 CountDownLatch 不同，CyclicBarrier 侧重于线程间的相互等待，而不是等待某些操作完成。示例代码：
       #image("Screenshot_20250906_123708.png")
       #image("Screenshot_20250906_123656.png")
+        - CountDownLatch和CyclicBarrier的区别主要就在于可重复，countdownlatch用一次后计数器归零就不能重置，而且	CountDownLatch单向：其他线程通知等待线程，而	CyclicBarrier双向/多向：线程互相等待，像“集合点”
       - Semaphore：Semaphore 是一个计数信号量，用于控制同时访问某个共享资源的线程数量。通过 acquire() 方法获取许可，使用 release() 方法释放许可。如果没有许可可用，线程将被阻塞，直到有许可被释放。可以用来限制对某些资源（如数据库连接池、文件操作等）的并发访问量。代码如下：
       #image("Screenshot_20250906_123737.png")
       - Future 和 Callable：Callable 是一个类似于 Runnable 的接口，但它可以返回结果，并且可以抛出异常。Future 用于表示一个异步计算的结果，可以通过它来获取 Callable 任务的执行结果或取消任务。代码如下：
@@ -559,7 +560,24 @@ class BlockingQueueExample {
         - 环路等待条件：环路等待条件指的是，在死锁发生的时候，两个线程获取资源的顺序构成了环形链。
         - 例如，线程 A 持有资源 R1 并试图获取资源 R2，而线程 B 持有资源 R2 并试图获取资源 R1，此时两个线程相互等待对方释放资源，从而导致死锁。
         - 避免死锁问题就只需要破环其中一个条件就可以，最常见的并且可行的就是使用资源有序分配法，来破环环路等待条件。
-        - 那什么是资源有序分配法呢？线程 A 和 线程 B 获取资源的顺序要一样，当线程 A 是先尝试获取资源 A，然后尝试获取资源 B 的时候，线程 B 同样也是先尝试获取资源 A，然后尝试获取资源 B。也就是说，线程 A 和 线程 B 总是以相同的顺序申请自己想要的资源。
+        - 那什么是资源有序分配法呢？线程 A 和 线程 B 获取资源的顺序要一样，当线程 A 是先尝试获取资源 A，然后尝试获取资源 B 的时候，线程 B 同样也是
+        先尝试获取资源 A，然后尝试获取资源 B。也就是说，线程 A 和 线程 B 总是以相同的顺序申请自己想要的资源。
+
+    - Java的锁有哪些
+      - 内置锁（Synchronized）
+      - 显式锁（ReentrantLock）
+      - 读写锁（ReadWriteLock）
+      - 偏向锁 / 轻量级锁 / 重量级锁/ 自旋锁（JVM 层优化）
+      - 乐观锁/CAS
+      - 其他锁机制
+        - StampedLock
+        - Semaphore：
+        - CountDownLatch / CyclicBarrier / Phaser：
+
+
+
+
+
   - 线程池
     - 介绍一下线程池的原理
       - 线程池是为了减少频繁的创建线程和销毁线程带来的性能损耗，线程池的工作原理如下图：

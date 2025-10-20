@@ -269,3 +269,97 @@
   ```
   - 不一定要选mid左边的为root,mid右的也可以
 
+
+- 验证二叉搜索树
+  #image("Screenshot_20251020_094713.png")
+  - 递归
+    ```java
+    class Solution {
+    public boolean isValidBST(TreeNode root) {
+        return isValidBST(root, Long.MIN_VALUE, Long.MAX_VALUE);
+    }
+
+    public boolean isValidBST(TreeNode node, long lower, long upper) {
+        if (node == null) {
+            return true;
+        }
+        if (node.val <= lower || node.val >= upper) {
+            return false;
+        }
+        return isValidBST(node.left, lower, node.val) && isValidBST(node.right, node.val, upper);
+    }
+}
+
+    ```
+    - 一开始初始最小值和最大值为min和max都为极限值
+    - 设计函数，传入节点，该节点要小于的值和该节点要大于的值
+    - 如果传入的是当前节点的左节点，要小于的值修改为root.val,要大于的值不变，右节点类似
+    - 这样节点只需要和他的root比较就可以
+
+
+  - 中序遍历
+    ```java
+    class Solution {
+    public boolean isValidBST(TreeNode root) {
+        Deque<TreeNode> stack = new LinkedList<TreeNode>();
+        double inorder = -Double.MAX_VALUE;
+
+        while (!stack.isEmpty() || root != null) {
+            while (root != null) {
+                stack.push(root);
+                root = root.left;
+            }
+            root = stack.pop();
+              // 如果中序遍历得到的节点的值小于等于前一个 inorder，说明不是二叉搜索树
+            if (root.val <= inorder) {
+                return false;
+            }
+            inorder = root.val;
+            root = root.right;
+        }
+        return true;
+    }
+}
+ 
+    ```
+    - 二叉搜索树的中序遍历一定是顺序的
+    - 利用inorder存储上一个节点的值
+    - 中序遍历的每个节点都和上一个inorder比较即可
+
+
+-  二叉搜索树中第 K 小的元素
+   #image("Screenshot_20251020_100545.png")
+   - 中序遍历 
+     ```java
+     class Solution {
+    public int kthSmallest(TreeNode root, int k) {
+        Deque<TreeNode> stack = new ArrayDeque<TreeNode>();
+        while (root != null || !stack.isEmpty()) {
+            while (root != null) {
+                stack.push(root);
+                root = root.left;
+            }
+            root = stack.pop();
+            --k;
+            if (k == 0) {
+                break;
+            }
+            root = root.right;
+        }
+        return root.val;
+    }
+}
+
+     ```
+     - 利用二叉搜素树中序遍历顺序的性质，中序遍历的同时k--，即可找到第k小的元素
+    
+    - 也是利用二叉搜索树中序遍历顺序的性质，记录每个节点的子树节点数，利用hashmap O（1）存储  
+      - 然后从根节点开始判断左子树的子树节点数
+        - 如果小于k-1说明不在左子树
+        - 如果等于k说明是当前节点
+        - 否则就在右子树
+    - 通过不断遍历直到找到第k小元素
+    
+
+
+    - AVL树，比二叉搜索树更平衡，搜索效率更高
