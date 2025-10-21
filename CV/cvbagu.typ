@@ -327,3 +327,181 @@
           - 是一个 频率过滤器（Frequency Filter），基于 计数最小化算法（Count-Min Sketch），记录每个 key 的访问频率。
           - 当一个新条目要进入 Main 区时，算法会比较它的访问频率和 Main 区里最不常用条目的频率：如果新条目访问频率高于被替换条目，则替换。否则被淘汰
 
+
+
+= 智能体
+== LangChain4j 与系统架构相关
+- 你为什么选择 LangChain4j 而不是直接调用 LLM API？
+  #image("Screenshot_20251020_202507.png")
+
+- LangChain4j 的核心组件有哪些？它和 LangChain（Python 版）相比有何异同？
+  - LangChain4j 是 LangChain 在 Java 生态中的官方移植与再设计版本，由 LangChain4j团队维护，保持了 LangChain 的整体思想框架：LLM 抽象 + 记忆系统 + 工具调用 + 文档检索增强（RAG） + 智能体（Agent）架构。
+  - ChatLanguageModel
+    - 封装了主流模型（OpenAI、Ollama、Qwen、阿里云百炼、Azure、Vertex AI、Mistral 等）的调用逻辑。
+  - PromptTemplate
+    - 模板化 Prompt 构造
+  - ChatMemory
+    - 自动保存上下文消息，实现有状态对话。
+    - 内置实现
+      - MessageWindowChatMemory（基于窗口的滑动记忆）
+      - InMemoryChatMemoryStore
+      - RedisChatMemoryStore
+  - RetrievalAugmentor（RAG 模块）
+    - 向量化文本 → 存储 → 检索相似内容 → 拼接到 Prompt 中 → 交给 LLM
+    - 主要组件：
+      - EmbeddingModel：生成文本向量（如 OpenAiEmbeddingModel、BGEEmbeddingModel）
+      - EmbeddingStore：存储向量（如 PgVectorEmbeddingStore、ChromaEmbeddingStore）
+      - RetrievalAugmentor：整合检索结果并传递给模型。
+  - AiServices（Declarative AI 接口）
+    - 核心：LangChain4j 最有特色的模块之一。
+    - 允许你用一个 Java 接口声明一个“智能体”，并用注解驱动：
+    - 同时支持工具调用（\@Tool）
+  - Tools（函数调用 / 插件系统）
+    - 支持通过注解\@Tool 或 FunctionTool 注册。
+    - 当模型生成的文本中包含指令时，会自动执行对应 Java 方法。
+  - DocumentLoaders + EmbeddingStore
+    - 可加载多种数据源（PDF、TXT、HTML、数据库）
+    - 向量化后存入 EmbeddingStore
+    - 可直接配合 RAG 使用。
+  - AgentExecutor
+    - 核心：完整的智能体执行引擎
+    - 可以根据模型输出动态决定调用哪个工具、是否继续推理。
+    - 内部实现 ReAct 模式（Reason + Act + Observation）。
+    #image("Screenshot_20251020_203412.png")
+  
+- 你在项目中是如何实现 会话隔离 的？
+  - LangChain4j 的 Memory 模块 + Redis 存储层实现持久化记忆
+  - 用户请求 → 带 userId/sessionId → 获取对应 Memory → 注入到 LangChain4j 会话 → 返回回答并更新记忆
+  - 使用 RedisChatMemoryStore（自定义 MemoryStore）
+    - LangChain4j 默认提供了 InMemoryChatMemoryStore，但这是 JVM 内存，不适合分布式部署。
+  - 绑定用户会话ID（实现会话隔离）
+    - 每个请求头都会带上 Authorization（JWT Token），后端从中解析出用户 ID
+    - 然后在创建 Memory 时使用这个唯一键
+  - LangChain4j 会话绑定
+    - 创建 Assistant（智能体）时，把 memory 注入：
+
+- LangChain4j 如何实现 消息注解（\@UserMessage, \@SystemMessage）？这些注解的作用是什么？
+  - 是 LangChain4j 提供的一种“消息角色建模机制”，用于在与大模型（LLM）的交互中标识不同来源的对话消息，从而精确控制提示（prompt）的构建逻辑。
+  - 假设你在 LangChain4j 中定义了一个智能助手接口：
+    ```java
+      @AiService
+  public interface Assistant {
+
+      @SystemMessage("You are a helpful assistant that answers concisely.")
+      @UserMessage("What is the capital of {{country}}?")
+      String askCapital(@V("country") String country);
+  }
+
+    ```
+  - 调用时：
+    ```java
+    String answer = assistant.askCapital("Japan");
+    System.out.println(answer);
+ 
+    ```
+  - 这会生成给 LLM 的消息序列：
+    ```
+    [
+  { "role": "system", "content": "You are a helpful assistant that answers concisely." },
+  { "role": "user", "content": "What is the capital of Japan?" }
+    ]
+    ```
+  - LangChain4j 会自动根据注解将方法中的字符串模板转化为消息对象，传入底层的 ChatCompletion 请求中。
+  - 底层实现原理（源码机制）
+    - LangChain4j 在构建 AiService 的代理类时，会扫描方法上的注解并构造消息列表。
+    - 简化流程如下：
+      - 注册阶段
+        - 当你用 AiServices.builder(Assistant.class).build(model) 创建代理对象时，LangChain4j 会扫描接口中所有方法。
+      - 注解解析
+        - 每个方法被封装为一个 AiServiceMethod 对象，它会读取：
+          - 方法上的 \@SystemMessage、\@UserMessage 等注解；
+          - 方法参数上的 \@V("...")、\@MemoryId、\@Context 等注解。
+      - 消息构建
+        - 当方法被调用时，LangChain4j 会根据模板替换参数（如 {{country}} → "Japan"），然后将这些注解转换为 ChatMessage 列表
+      - 发送给 LLM
+
+- 你是如何在 Spring Boot 中集成 LangChain4j 的？（例如配置、上下文管理）
+  - 引入依赖
+  - 模型配置类（LangChain4j 配置 Bean）
+    - 例如使用 Ollama 本地模型：
+      ```java
+              @Configuration
+        public class LangChainConfig {
+
+            @Bean
+            public ChatLanguageModel chatModel() {
+                return OllamaChatModel.builder()
+                        .baseUrl("http://localhost:11434") // Ollama 服务地址
+                        .modelName("llama3") // 模型名
+                        .temperature(0.7)
+                        .build();
+            }
+        }
+ 
+      ```
+    - 若使用阿里云百炼 DashScope：
+      ```java
+            @Bean
+      public ChatLanguageModel dashscopeModel() {
+          return DashScopeChatModel.builder()
+                  .apiKey(System.getenv("DASHSCOPE_API_KEY"))
+                  .modelName("qwen-turbo")
+                  .build();
+      }
+ 
+      ```
+  - 上下文管理（记忆）
+    - LangChain4j 提供多种记忆方式（Memory），可用来保存对话上下文。在生产中常配合 Redis 实现 会话隔离。
+  - 定义 AI 接口（LangChain4j Agent）
+    - LangChain4j 提供了类似 Spring 的声明式 AI 接口定义机制。
+    ```java
+        @AiService
+    public interface ChatAgent {
+
+        @SystemMessage("你是一个智能对话助手。")
+        @UserMessage("用户说：{input}")
+        String chat(@V("input") String input);
+    }
+ 
+    ```
+  - 然后在配置类中创建代理实例：
+    ```java
+        @Bean
+    public ChatAgent chatAgent(ChatLanguageModel chatModel, Memory memory) {
+        return AiServices.create(ChatAgent.class, chatModel, memory);
+    }
+ 
+    ```
+  - Controller 层接入
+    ```java
+        @RestController
+    @RequestMapping("/api/chat")
+    public class ChatController {
+
+        private final RedisMemoryManager memoryManager;
+        private final ChatLanguageModel model;
+
+        public ChatController(RedisMemoryManager memoryManager, ChatLanguageModel model) {
+            this.memoryManager = memoryManager;
+            this.model = model;
+        }
+
+        @PostMapping
+        public String chat(@RequestParam String sessionId, @RequestParam String message) {
+            Memory memory = memoryManager.getMemory(sessionId);
+            ChatAgent agent = AiServices.create(ChatAgent.class, model, memory);
+            return agent.chat(message);
+        }
+    }
+ 
+    ```
+
+== 会话记忆与上下文管理
+
+== RAG（检索增强生成）与知识库构建
+
+== 大模型部署与性能优化
+
+== 工具调用与扩展能力
+
+== 架构设计与工程实践

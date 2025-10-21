@@ -1,0 +1,57 @@
+- 分区
+  - 每个 Topic 可以有 一个或多个 Partition。
+  - 同一个 Topic 的每个 Partition 数量是固定的（在创建 Topic 时指定），所有 Broker 会知道 Partition 分布。
+  - 不同 Topic 的 Partition 数量可以不同。
+  - 生产者发送消息时，Kafka 会根据以下规则选择目标 Partition：
+    - 指定 Partition（手动分配）
+      - 生产者可以明确指定消息发送到哪个 Partition。
+    - 基于 Key 的分区（默认常用方式）
+      - 如果消息带有 Key，Kafka 会对 Key 做 Hash 取模来决定 Partition。
+      - 优点：保证 同一个 Key 的消息总是落在同一个 Partition，保证顺序性。
+    - 轮询（无 Key）
+      - 如果消息没有 Key，生产者会在可用 Partition 上 轮询分配，实现负载均衡。
+  - Partition 内消息有序，但是跨 Partition 不保证顺序。
+
+- 主题
+  - Topic 是 Kafka 中 逻辑上的消息分类单位，可以理解为“消息的类别”或“消息队列的名字”。
+  - 生产者向 Topic 写入消息，消费者从 Topic 读取消息。
+  - Topic 本身不存储消息，而是通过 Partition 存储到 Broker 上。
+  - Topic 的组成
+    - Partition（分区）
+    - Replica（副本）
+      - Partition 可以有多个副本（replica），分布在不同 Broker 上。
+        - Partition 的副本不能全部在同一个 Broker 上，否则某个 Broker 宕机时，整个 Partition 的数据可能不可用。
+      - Leader：负责读写操作
+      - Follower：复制 Leader 的数据，实现高可用
+    - Offset（偏移量）
+      - 每条消息在 Partition 中有唯一的 Offset（类似序号）。Consumer 可以通过 Offset 精确读取某条消息。
+      - Consumer 根据 Offset 消费消息，可以支持 重复消费或断点续读。 Consumer 可以记录自己消费到的 Offset，下次从上次的位置继续消费。
+      - Consumer 如何管理 Offset
+        - 自动提交（auto commit）
+          - Kafka 可以自动记录 Consumer 消费的 Offset（默认每隔 5 秒提交一次）
+        - 手动提交（manual commit）
+          - Consumer 自行管理 Offset，消费完成后再提交
+        - 存储位置
+          - Offset 可以存储在 Kafka 内部的 __consumer_offsets Topic也可以存储在外部系统（如数据库）
+
+- ZooKeeper
+  - Kafka 是一个分布式消息队列系统，它由多个 Broker 节点组成。为了保证集群的高可用性和协调一致性，需要解决以下问题：
+    - Broker 节点管理：谁是活跃的节点，谁挂了，集群如何感知。
+    - Topic 和 Partition 元数据管理：每个 Topic 有多少 Partition，每个 Partition 的 Leader 是谁。
+    - Leader 选举：Partition 的 Leader 挂了，如何快速选出新的 Leader。
+    - 消费者组管理（旧版本 Kafka）：记录每个消费者消费到哪个 offset。
+  - Zookeeper 提供了 可靠的分布式协调服务，正好解决了这些问题
+    - Broker 节点注册：每个 Kafka Broker 启动时，会在 Zookeeper 注册自己，并定期发送心跳。
+    - Topic/Partition 元数据存储：Topic 的 Partition 数量、Leader、Follower 信息存储在 Zookeeper 中。
+    - Leader 选举：当某个 Partition 的 Leader 挂掉时，Zookeeper 会协助选举新的 Leader。
+    - 配置信息推送：Broker 之间的配置或集群变化，可以通过 Zookeeper 通知其他节点。
+  - 从 Kafka 2.8 之后，Kafka 开始提供 KRaft 模式（Kafka Raft Metadata Mode），可以 不依赖 Zookeeper
+  - 核心特性
+    - 高可用
+    - 顺序一致性
+      - Zookeeper 保证对同一个 znode 的更新会按照顺序执行。
+    - 原子性
+    - 通知机制
+      - 客户端可以对 znode 注册监听器，一旦节点数据发生变化，就会收到通知。
+    - 轻量级
+      - 数据以 树形结构（类似文件系统） 存储，节点称为 znode。

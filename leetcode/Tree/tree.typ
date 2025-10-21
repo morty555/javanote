@@ -363,3 +363,54 @@
 
 
     - AVL树，比二叉搜索树更平衡，搜索效率更高
+
+
+- 二叉树的右视图
+  #image("Screenshot_20251021_100819.png")
+  - 深度遍历 
+    ```java
+    class Solution {
+    public List<Integer> rightSideView(TreeNode root) {
+        Map<Integer, Integer> rightmostValueAtDepth = new HashMap<Integer, Integer>();
+        int max_depth = -1;
+
+        Deque<TreeNode> nodeStack = new LinkedList<TreeNode>();
+        Deque<Integer> depthStack = new LinkedList<Integer>();
+        nodeStack.push(root);
+        depthStack.push(0);
+
+        while (!nodeStack.isEmpty()) {
+            TreeNode node = nodeStack.pop();
+            int depth = depthStack.pop();
+
+            if (node != null) {
+            	// 维护二叉树的最大深度
+                max_depth = Math.max(max_depth, depth);
+
+                // 如果不存在对应深度的节点我们才插入
+                if (!rightmostValueAtDepth.containsKey(depth)) {
+                    rightmostValueAtDepth.put(depth, node.val);
+                }
+
+                nodeStack.push(node.left);
+                nodeStack.push(node.right);
+                depthStack.push(depth + 1);
+                depthStack.push(depth + 1);
+            }
+        }
+
+        List<Integer> rightView = new ArrayList<Integer>();
+        for (int depth = 0; depth <= max_depth; depth++) {
+            rightView.add(rightmostValueAtDepth.get(depth));
+        }
+
+        return rightView;
+    }
+}
+
+    ```
+    - 用一个栈维护深度，一个栈维护节点
+    - 每次取出两个栈顶节点后，维护最大深度，同时判断从深度栈顶取出的深度在哈希表中是否有key,如果有说明该node已经不是最右侧的了
+    - 如果没有说明该深度是第一次put,是最右侧的
+    - 更新栈元素时，先push左节点，再push右节点，这样从栈中取出来的一定是优先右子树的元素
+    - 最后用维护的最大深度，遍历哈希表将元素放入结果链表返回
