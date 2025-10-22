@@ -388,7 +388,20 @@
       - 「先更新数据库，再删缓存」的策略的第一步是更新数据库，那么更新数据库成功，就会产生一条变更日志，记录在 binlog 里。
       - 于是我们就可以通过订阅 binlog 日志，拿到具体要操作的数据，然后再执行缓存删除，阿里巴巴开源的 Canal 中间件就是基于这个实现的。
       - Canal 模拟 MySQL 主从复制的交互协议，把自己伪装成一个 MySQL 的从节点，向 MySQL 主节点发送 dump 请求，MySQL 收到请求后，就会开始推送 Binlog 给 Canal，Canal 解析 Binlog 字节流之后，转换为便于读取的结构化数据，供下游程序订阅使用。
+      - Canal架构
+        - Canal Server
+          - 负责与 MySQL 建立连接、读取并解析 binlog 数据。内部包含以下模块：
+            - Instance：	每个 Instance 对应一个数据源（即一个 MySQL 实例）。
+            - Parser：从 MySQL 获取 binlog 并解析。
+            - EventStore：	存储解析后的事件（支持 memory / Kafka 等）。
+            - MetaManager：保存消费位点（position）信息。
+            - Server：提供 TCP 协议给 Client 消费。
+        - Canal Client
+          - Canal Client 是消费者，负责从 Canal Server 拉取 binlog 事件，并根据业务处理。
+        - Canal Adapter
+          - Canal Adapter 是 Canal 的高级扩展，用于将数据同步到各种异构系统：
     - 个人思考，也可以用lua脚本将修改数据库和删除缓存放到一起，但是这样弊端是失败了不能重试
+
 + Redis实战
   - Redis 如何实现延迟队列？
     - 延迟队列是指把当前要做的事情，往后推迟一段时间再做。延迟队列的常见使用场景有以下几种：

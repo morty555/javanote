@@ -414,3 +414,179 @@
     - 如果没有说明该深度是第一次put,是最右侧的
     - 更新栈元素时，先push左节点，再push右节点，这样从栈中取出来的一定是优先右子树的元素
     - 最后用维护的最大深度，遍历哈希表将元素放入结果链表返回
+
+  - 广度遍历 
+    - 用队列，先进先出，先放左节点，这样右节点是最后被拿到的
+  - Queue是只能一端进一端出
+  - Deque是双端队列，两端都可进可出，Deque也常用作栈
+
+- 二叉树展开为链表
+  #image("Screenshot_20251022_095721.png")
+  - 前序遍历
+    - 先将链表前序遍历的结果放到list
+    - 再for循环接到root的右节点
+
+  - 前序遍历和展开同步进行
+    - 上一个方法需要分开执行
+    - 这个方法我们遍历和展开同时进行
+    ```java
+    class Solution {
+    public void flatten(TreeNode root) {
+        if (root == null) {
+            return;
+        }
+        Deque<TreeNode> stack = new LinkedList<TreeNode>();
+        stack.push(root);
+        TreeNode prev = null;
+        while (!stack.isEmpty()) {
+            TreeNode curr = stack.pop();
+            if (prev != null) {
+                prev.left = null;
+                prev.right = curr;
+            }
+            TreeNode left = curr.left, right = curr.right;
+            if (right != null) {
+                stack.push(right);
+            }
+            if (left != null) {
+                stack.push(left);
+            }
+            prev = curr;
+        }
+    }
+}
+
+    ```
+    - 用栈存储节点，先遍历完左子树再到右子树
+    - 每次用pre记录上一个节点，这样前序遍历到下一个节点的时候可以直接拿上一个节点的left=null,right=当前节点来更新二叉树为链表
+    - 不用担心right更改后指针丢失的问题，因为已经用栈存储了右子树的根节点
+
+  - 方法三：寻找前驱节点
+    - 注意到前序遍历访问各节点的顺序是根节点、左子树、右子树。如果一个节点的左子节点为空，则该节点不需要进行展开操作。如果一个节点的左子节点不为空，则该节点的左子树中的最后一个节点被访问之后，该节点的右子节点被访问。该节点的左子树中最后一个被访问的节点是左子树中的最右边的节点，也是该节点的前驱节点。因此，问题转化成寻找当前节点的前驱节点。
+    - 其实思路就是，因为前序遍历每次都是按照根->左->右的顺序，那左子树遍历完就到右子树，即左子树遍历到最右节点就到右子树，因此我们只要把每个节点r的左子树的最右节点移动到r右子树之前，再把r的右指针指向r的左孩子，左指针指向空即可
+
+
+- 从前序与中序遍历序列构造二叉树
+  #image("Screenshot_20251022_123226.png")
+  - 方法一：递归
+    ```java
+    class Solution {
+    private Map<Integer, Integer> indexMap;
+
+    public TreeNode myBuildTree(int[] preorder, int[] inorder, int preorder_left, int preorder_right, int inorder_left, int inorder_right) {
+        if (preorder_left > preorder_right) {
+            return null;
+        }
+
+        // 前序遍历中的第一个节点就是根节点
+        int preorder_root = preorder_left;
+        // 在中序遍历中定位根节点
+        int inorder_root = indexMap.get(preorder[preorder_root]);
+        
+        // 先把根节点建立出来
+        TreeNode root = new TreeNode(preorder[preorder_root]);
+        // 得到左子树中的节点数目
+        int size_left_subtree = inorder_root - inorder_left;
+        // 递归地构造左子树，并连接到根节点
+        // 先序遍历中「从 左边界+1 开始的 size_left_subtree」个元素就对应了中序遍历中「从 左边界 开始到 根节点定位-1」的元素
+        root.left = myBuildTree(preorder, inorder, preorder_left + 1, preorder_left + size_left_subtree, inorder_left, inorder_root - 1);
+        // 递归地构造右子树，并连接到根节点
+        // 先序遍历中「从 左边界+1+左子树节点数目 开始到 右边界」的元素就对应了中序遍历中「从 根节点定位+1 到 右边界」的元素
+        root.right = myBuildTree(preorder, inorder, preorder_left + size_left_subtree + 1, preorder_right, inorder_root + 1, inorder_right);
+        return root;
+    }
+
+    public TreeNode buildTree(int[] preorder, int[] inorder) {
+        int n = preorder.length;
+        // 构造哈希映射，帮助我们快速定位根节点
+        indexMap = new HashMap<Integer, Integer>();
+        for (int i = 0; i < n; i++) {
+            indexMap.put(inorder[i], i);
+        }
+        return myBuildTree(preorder, inorder, 0, n - 1, 0, n - 1);
+    }
+}
+
+    ```
+    - hashmap存储中序遍历数组节点，value是key,节点是index
+    - 前序遍历第一个节点是root,可以在hashmap中找到root对应的索引
+    - 计算左子树节点个数
+    - 先建立root节点
+    - 通过root节点递归，root.left代入前序遍历左半边的范围，即从左边界到左边界+左子树节点个数，中序遍历则是从根节点index向左拓展到左边界
+    - root.right类似 前序遍历代入左边界+左子树个数+1到前序遍历右边界，中序遍历代入rootindex+1到中序遍历右边界
+
+  - 迭代
+
+
+
+
+- 路径总和 III
+  #image("Screenshot_20251022_153911.png")
+  - 深度优先搜索
+    ```java
+    class Solution {
+    public int pathSum(TreeNode root, long targetSum) {
+        if (root == null) {
+            return 0;
+        }
+
+        int ret = rootSum(root, targetSum);
+        ret += pathSum(root.left, targetSum);
+        ret += pathSum(root.right, targetSum);
+        return ret;
+    }
+
+    public int rootSum(TreeNode root, long targetSum) {
+        int ret = 0;
+
+        if (root == null) {
+            return 0;
+        }
+        int val = root.val;
+        if (val == targetSum) {
+            ret++;
+        } 
+
+        ret += rootSum(root.left, targetSum - val);
+        ret += rootSum(root.right, targetSum - val);
+        return ret;
+    }
+}
+
+    ```
+    - 遍历每个节点，判断以节点为root向下遍历是否存在相加为targetSum的节点组
+
+  - 前序遍历 + 回溯 + 前缀和
+    ```java
+    class Solution {
+    public int pathSum(TreeNode root, int targetSum) {
+        Map<Long, Integer> prefix = new HashMap<Long, Integer>();
+        prefix.put(0L, 1);
+        return dfs(root, prefix, 0, targetSum);
+    }
+
+    public int dfs(TreeNode root, Map<Long, Integer> prefix, long curr, int targetSum) {
+        if (root == null) {
+            return 0;
+        }
+
+        int ret = 0;
+        curr += root.val;
+
+        ret = prefix.getOrDefault(curr - targetSum, 0);
+        prefix.put(curr, prefix.getOrDefault(curr, 0) + 1);
+        ret += dfs(root.left, prefix, curr, targetSum);
+        ret += dfs(root.right, prefix, curr, targetSum);
+        prefix.put(curr, prefix.getOrDefault(curr, 0) - 1);
+
+        return ret;
+    }
+}
+
+    ```
+    - 用hashmap记录一条链路上出现前缀和的次数
+    - 前序遍历，确保遍历所得到的前缀和处在一条链路上
+    - 每次判断所遍历节点前缀和（包括该节点）-targetSum在之前是否出现过（hashmap中以curr-targetNum为key的值），若有则添加到ret
+    - 若当前节点左右子树都已经遍历完，回溯，去除该节点在hashmap中的前缀和，避免污染其他路径的前缀和数据
+
+- 
