@@ -629,6 +629,28 @@
   - HTTPS 的 TLS 四次握手：如果使用的是 HTTPS 协议，在通信前还存在 TLS 的四次握手。
   - 发送HTTP请求：连接建立后，浏览器会向服务器发送HTTP请求。请求中包含了用户需要获取的资源的信息，例如网页的URL、请求方法（GET、POST等）等。
   - 服务器处理请求并返回响应：服务器收到请求后，会根据请求的内容进行相应的处理。例如，如果是请求网页，服务器会读取相应的网页文件，并生成HTTP响应。
+- 建立 HTTP 连接后，请求是如何传递到后端程序的?
+  - 客户端构造 HTTP 请求：浏览器通过 TCP 将这个请求字节流发送给服务器的端口。
+  - 服务器监听某个端口（如 80 或 443）：
+    - Web 服务器软件（如 Nginx、Apache、Tomcat、Node.js 的 HTTP 模块）接收到 TCP 数据流。
+      - Web 容器（Web Container） 是一个运行 Web 应用的服务器环境，它：
+        - 负责 监听端口（如 8080）；
+        - 负责 接收 HTTP 请求；
+        - 负责 创建/管理 Servlet 对象；
+        - 负责 调度生命周期方法
+    - 解析 TCP 数据流成HTTP 请求报文：
+      - 请求行（方法、路径、HTTP 版本）
+      - 请求头（Host、Cookie、User-Agent…）
+      - 请求体（POST/PUT 的 JSON、表单、文件等）
+    -  封装为 HttpServletRequest 和 HttpServletResponse 对象
+    - 找到要处理的 Servlet（如 DispatcherServlet）
+    - 调用 Servlet 的 service() 方法
+    
+  - 拦截器会在进入你的业务逻辑（Controller）之前，拿到请求头（如 Token、Cookie、Session 等）进行权限校验。
+  - DispatcherServlet的任务是接管所有进入应用的 HTTP 请求，然后根据配置分发给正确的 Controller。服务器根据URL 路径 + HTTP 方法决定由哪个后端程序处理：
+    - 在 Java 中：Servlet 容器（Tomcat、Jetty）根据 web.xml 或注解 \@RequestMapping 匹配到具体 Controller。
+#image("Screenshot_20251022_204725.png")
+
 
 - 网页非常慢转圈圈的时候，要定位问题需要从哪些角度？
   - 最直接的办法就是抓包，排查的思路大概有：

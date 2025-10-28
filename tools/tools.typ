@@ -236,6 +236,39 @@ public SecurityFilterChain filterChain(HttpSecurity http, RedisAuthenticationFil
 }
  
     ```
+
+- easyExcel底层, 为什么用它操作excel不会OOM
+  - 传统 Excel 解析（POI）的问题
+    - 像 Apache POI（尤其是 XSSFWorkbook）这种库，默认做法是：
+      - 一次性把整个 Excel 文件加载到内存；
+      - 建立完整的对象树（Workbook → Sheet → Row → Cell）；
+      - 然后再操作数据。
+    - 一个 100MB 的 Excel 文件，经过 POI 加载后，内存可能瞬间占用几百 MB 甚至上 GB。
+     - 每个单元格都封装为 XSSFCell 对象；
+     - 还要保存样式、字体、合并单元格信息；
+     - 所有数据结构都驻留在内存。
+    - 所以 POI 是“DOM 模型解析”（把整个 XML 树构建进内存），文件越大越容易 OOM。
+  - EasyExcel 的核心机制 —— SAX（事件驱动流式解析）
+    - EasyExcel 在 读取 Excel 时，采用了类似 XML 解析的 SAX 模式：
+      - 不把整个文件读入内存
+      - 而是基于 事件回调（EventHandler），逐行、逐单元格解析； 
+      - 每读一行，立刻交给用户回调处理逻辑；
+      - 处理完就释放内存（该行的数据不会再保留）。
+    - 在执行时，EasyExcel 会：
+      - 使用 POI 的底层 SAX 解析器（org.apache.poi.xssf.eventusermodel.XSSFReader）；
+      - 内部通过 XMLReader 逐行触发事件；
+      - 每当解析到一行数据时，调用你的 DemoDataListener.invoke(data, context)；
+      - 用户逻辑执行完后，这行数据就被 GC 回收；
+      - 整个过程中，内存里同时只会存在“一行数据 + 一点解析状态”。
+      - 内存使用量 ≈ 行数据对象大小 × 1~2倍
+
+
+
+
+
+
+
+
 - Sa-token
 - snailjob
 

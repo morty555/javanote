@@ -589,4 +589,115 @@
     - 每次判断所遍历节点前缀和（包括该节点）-targetSum在之前是否出现过（hashmap中以curr-targetNum为key的值），若有则添加到ret
     - 若当前节点左右子树都已经遍历完，回溯，去除该节点在hashmap中的前缀和，避免污染其他路径的前缀和数据
 
-- 
+- 二叉树的最近公共祖先
+  #image("Screenshot_20251024_095936.png")
+  - 递归
+  ```java
+  /**
+ * Definition for a binary tree node.
+ * public class TreeNode {
+ *     int val;
+ *     TreeNode left;
+ *     TreeNode right;
+ *     TreeNode(int x) { val = x; }
+ * }
+ */
+class Solution {
+    private TreeNode ans ;
+    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {
+        dfs(root,p,q);
+        return ans;
+    }
+    public boolean dfs(TreeNode root , TreeNode p,TreeNode q){
+        if(root==null){
+            return false;
+        }
+        boolean lson =  dfs(root.left,p,q);
+        boolean rson =  dfs(root.right,p,q);
+        if((lson&&rson)||(lson||rson)&&(root==p||root==q)){
+            ans = root;
+        }
+        return lson||rson||root==p||root == q;
+    }
+} 
+  ```
+  - 从根节点开始前序遍历每一个节点，也就是递归当前节点的左右子树，到最深层开始返回
+  - 当当前节点的值为p,q中任一个，返回true，若当前节点的左右子树返回true,则也返回true,因为当前节点属于他们的祖先
+  - 如果节点的左右子树都返回true,或者一个返回true，并且当前节点的值是p,q中任意一个，说明该节点是最近公共祖先
+  - 最近的原因是，从深层开始递归回根，最先判断出条件成立的一定是更深的节点，也就是更近的祖先
+
+  - 存储父节点
+    ```java
+    class Solution {
+    Map<Integer, TreeNode> parent = new HashMap<Integer, TreeNode>();
+    Set<Integer> visited = new HashSet<Integer>();
+
+    public void dfs(TreeNode root) {
+        if (root.left != null) {
+            parent.put(root.left.val, root);
+            dfs(root.left);
+        }
+        if (root.right != null) {
+            parent.put(root.right.val, root);
+            dfs(root.right);
+        }
+    }
+
+    public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {
+        dfs(root);
+        while (p != null) {
+            visited.add(p.val);
+            p = parent.get(p.val);
+        }
+        while (q != null) {
+            if (visited.contains(q.val)) {
+                return q;
+            }
+            q = parent.get(q.val);
+        }
+        return null;
+    }
+}
+
+    ```
+    - 递归将所有节点的父节点加入哈希表
+    - 在主线程通过哈希表用一个set存储从p开始的所有的p的父节点
+    - 再通过哈希表对q节点及其每一个父节点进行判断，如果存在则直接返回结果
+  
+
+- 二叉树中的最大路径
+  #image("Screenshot_20251024_105203.png")
+  - 递归
+    ```java
+    class Solution {
+    int maxSum = Integer.MIN_VALUE;
+
+    public int maxPathSum(TreeNode root) {
+        maxGain(root);
+        return maxSum;
+    }
+
+    public int maxGain(TreeNode node) {
+        if (node == null) {
+            return 0;
+        }
+        
+        // 递归计算左右子节点的最大贡献值
+        // 只有在最大贡献值大于 0 时，才会选取对应子节点
+        int leftGain = Math.max(maxGain(node.left), 0);
+        int rightGain = Math.max(maxGain(node.right), 0);
+
+        // 节点的最大路径和取决于该节点的值与该节点的左右子节点的最大贡献值
+        int priceNewpath = node.val + leftGain + rightGain;
+
+        // 更新答案
+        maxSum = Math.max(maxSum, priceNewpath);
+
+        // 返回节点的最大贡献值
+        return node.val + Math.max(leftGain, rightGain);
+    }
+}
+    ```
+    - 从根节点递归，查找每个节点的左右子树的贡献值（即子树的路径中找到和最大的路径）
+    - 对每个节点都判断更新一次MAX，max就是左右子树的最大贡献值+当前节点的值
+    - 因为节点的值可能为父，因此最大贡献值最小为0，即左右子树的贡献值若为负数则返回0，相当于不取该子树路径
