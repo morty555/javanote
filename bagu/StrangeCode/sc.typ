@@ -347,3 +347,109 @@ public class MiniMessageQueue {
   - 原生 Java 很难做到真正 O(1)
   - Java 的 String 是不可变对象，无法直接在原字符串上修改。
   - 所以在 Java 中 原地修改字符串只能借助 char[]，这在理论上仍算 O(n) 空间。
+
+- 实现全排列的核心方法思路是什么？
+  - 思路本质上是 递归 + 回溯
+  - 使用 visited 数组
+  ```java
+  import java.util.*;
+
+public class Permutations1 {
+    public List<List<Integer>> permute(int[] nums) {
+        List<List<Integer>> result = new ArrayList<>();
+        boolean[] visited = new boolean[nums.length];
+        backtrack(nums, new ArrayList<>(), visited, result);
+        return result;
+    }
+
+    private void backtrack(int[] nums, List<Integer> path, boolean[] visited, List<List<Integer>> result) {
+        if (path.size() == nums.length) {
+            result.add(new ArrayList<>(path));  // 终止条件
+            return;
+        }
+
+        for (int i = 0; i < nums.length; i++) {
+            if (visited[i]) continue;           // 已经选择过的元素跳过
+            path.add(nums[i]);
+            visited[i] = true;                  // 标记已访问
+            backtrack(nums, path, visited, result);
+            path.remove(path.size() - 1);       // 回溯
+            visited[i] = false;                 // 撤销标记
+        }
+    }
+
+    public static void main(String[] args) {
+        Permutations1 p = new Permutations1();
+        int[] nums = {1, 2, 3};
+        List<List<Integer>> res = p.permute(nums);
+        System.out.println(res);
+    }
+}
+
+  ```
+  - 原地交换
+  ```java 
+  import java.util.*;
+
+public class Permutations2 {
+    public List<List<Integer>> permute(int[] nums) {
+        List<List<Integer>> result = new ArrayList<>();
+        backtrack(nums, 0, result);
+        return result;
+    }
+
+    private void backtrack(int[] nums, int start, List<List<Integer>> result) {
+        if (start == nums.length) {
+            List<Integer> temp = new ArrayList<>();
+            for (int num : nums) temp.add(num);
+            result.add(temp);
+            return;
+        }
+
+        for (int i = start; i < nums.length; i++) {
+            swap(nums, start, i);          // 交换
+            backtrack(nums, start + 1, result);
+            swap(nums, start, i);          // 回溯
+        }
+    }
+
+    private void swap(int[] nums, int i, int j) {
+        int t = nums[i];
+        nums[i] = nums[j];
+        nums[j] = t;
+    }
+
+    public static void main(String[] args) {
+        Permutations2 p = new Permutations2();
+        int[] nums = {1, 2, 3};
+        List<List<Integer>> res = p.permute(nums);
+        System.out.println(res);
+    }
+}
+
+  ```
+  - 时间复杂度O(n⋅n!)
+
+
+
+- 正则表达式匹配字符串
+  - a.b → "a+b" "acb"  
+    - .表示任意字符
+  - \d表示数据
+  - \w字母、数字、下划线
+  - \s  空格（space）
+  - \D \W \S大写即取反
+  - \*0次或多次
+    - a\* 匹配 "", "aaa"
+  - +1次或多次
+    - a+ 匹配 "a", "aaa"
+  - ?	0或1次
+    - colou?r → "color"/"colour"
+  - {n}恰好n次
+    - \d{4}
+  - {n,}至少n次
+  -  {n,m}n到m次
+  - ^开头
+  - \$结尾
+  - \b单词边界
+  - ()分组

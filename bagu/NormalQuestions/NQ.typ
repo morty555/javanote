@@ -1,5 +1,16 @@
 = 牛客面经
-
+- Java数据结构
+  - Collection
+    - List
+      - 	ArrayList、LinkedList、Vector
+    - set
+      - 	HashSet、LinkedHashSet、TreeSet
+    - Queue
+      - 	LinkedList、PriorityQueue
+    - Deque
+      - 	ArrayDeque、LinkedList
+  - Map
+    - HashMap、LinkedHashMap、TreeMap、Hashtable、ConcurrentHashMap
 
 - 介绍一下堆的实现方式，插入删除时间复杂度
   - 堆是一种完全二叉树（complete binary tree）
@@ -27,6 +38,50 @@
     #image("Screenshot_20251025_094254.png")
     #image("Screenshot_20251025_094320.png")
     #image("Screenshot_20251025_094328.png")
+
+- Caffeine、Guava 等本地缓存与 Java 普通哈希方法的区别是什么？
+  - HashMap / ConcurrentHashMap
+    - 本质是一个纯粹的键值存储容器。
+    - 不提供过期、淘汰、统计等缓存功能。
+    - 内存占用完全由 JVM GC 管理。
+    - hashmap不是线程安全的，concurrenthashamap线程安全
+  - Caffeine / Guava Cache
+    - 支持自动过期、大小限制、LRU/LFU 淘汰策略、异步刷新等。
+    - 可以统计命中率、加载未命中数据（通过 CacheLoader）。
+    - 支持 容量限制，超过限制时自动根据策略淘汰：
+      - LRU (最近最少使用)
+      - LFU (最不经常使用，Guava 支持)
+      - 基于权重（Caffeine）
+    - 支持 时间过期：
+      - 写入后过期（expireAfterWrite）
+      - 访问后过期（expireAfterAccess）
+    - 内部通常支持高并发访问（Caffeine 基于 CAS + Segment + 写延迟队列）。
+
+- 用线程池或多线程扫描缓存淘汰数据，会为系统带来多少额外开销？有其他更好的方法吗？
+  - 额外开销主要有以下几个方面：
+    - CPU 开销
+      - 每次扫描需要访问缓存的内部数据结构（哈希表/链表/跳表等）。如果缓存很大，比如百万级或亿级条目，遍历整个缓存会占用大量 CPU 时间。
+    - 内存开销
+      - 多线程扫描时可能需要额外的临时数据结构（比如线程本地队列或标记数组），尤其在分段锁/分片缓存中，每个线程可能持有额外引用。
+    - 锁/同步开销
+      - 如果缓存内部数据结构需要加锁（Segment 或 synchronized），并发扫描会导致锁竞争。
+      - 高并发情况下，可能会影响正常读写操作的吞吐量。
+    - 上下文切换
+      - 大量线程会带来上下文切换成本，尤其是线程数 > CPU 核数时。
+  - 现代高性能缓存（如 Caffeine）都尽量避免全量扫描，使用“懒惰淘汰 + 局部维护”的策略：
+    - 惰性/访问时淘汰（Lazy Eviction）：只有在访问缓存时，才检查该条目是否过期或需要淘汰。
+      - 优点：无需定期扫描，CPU 开销几乎为零
+      - 缺点：不访问的缓存可能长时间占用空间，但一般配合容量限制可控。
+    - 分段/分片淘汰（Segmented Eviction）
+      - 将缓存分成 N 段，每段独立管理 LRU/过期策略。
+      - 只扫描活跃段或随机抽样部分条目，不需要全量扫描。
+    - 写入触发淘汰（Write-Driven Eviction）
+      - 当缓存容量接近阈值时，在写操作时顺便淘汰最老或最不常访问的条目。
+    - 近似 LRU / CLOCK 算法
+      - 可以用环形数组或队列，每次淘汰时随机检查部分条目。
+      - 不严格维护全局访问顺序，只维护近似顺序。
+    - 异步批量淘汰队列
+      - 只有写入时将条目放入延迟队列，由后台线程异步清理，但不扫描整个缓存。
 
 
 - java中hashmap是干什么的，主要用途？插入，删除时间复杂度？
@@ -222,7 +277,7 @@
   - 而且 JDK 1.8 使用的是红黑树优化了之前的固定链表，那么当数据量比较大的时候，查询性能也得到了很大的提升，从之前的 O(n) 优化到了 O(logn) 的时间复杂度。
   - 分段锁怎么加锁的？
     - 在 ConcurrentHashMap 中，对于插入、更新、删除等操作，需要先定位到具体的 Segment，然后再在该 Segment 上加锁，而不是像传统的 HashMap 一样对整个数据结构加锁。这样可以使得不同 Segment 之间的操作并行进行，提高了并发性能。
-    
+    - get过程中使用了大量的volatile关键字,并没有加锁，保证了可见性
   - 分段锁是可重入的吗？
     - JDK 1.7 ConcurrentHashMap中的分段锁是用了 ReentrantLock，是一个可重入的锁。
   
@@ -230,6 +285,13 @@
     - ConcurrentHashMap使用这两种手段来保证线程安全主要是一种权衡的考虑，在某些操作中使用synchronized，还是使用CAS，主要是根据锁竞争程度来判断的。
     - 比如：在putVal中，如果计算出来的hash槽没有存放元素，那么就可以直接使用CAS来进行设置值，这是因为在设置元素的时候，因为hash值经过了各种扰动后，造成hash碰撞的几率较低，那么我们可以预测使用较少的自旋来完成具体的hash落槽操作。
     - 当发生了hash碰撞的时候说明容量不够用了或者已经有大量线程访问了，因此这时候使用synchronized来处理hash碰撞比CAS效率要高，因为发生了hash碰撞大概率来说是线程竞争比较强烈。
+
+-  ConcurrentHashMap 实现缓存的时间复杂度是多少？如何做到的？
+  - 当桶内为链表时，GET,PUT,DELETE，CONTAINSKEY的复杂度为O（1）
+  - 当为红黑树时，为O（logn）
+
+- 为什么hashmap中允许key或者value为null？而concurrenrtHashMap不允许key或者value为null
+  - 在map中，调用map.get(key)方法得到的值是null，那你无法判断这个key是在map里面没有映射过，还是这个key本身设置就null。这种情况下，在非并发安全的map中，可以通过map.contains(key)的方法来判断。但是在考虑并发安全的map中，两次调用的过程中，这个值是很有可能被改变的。
 
 - sychronized和reentrantlock
   #image("Screenshot_20251014_201712.png")
@@ -274,6 +336,22 @@
   - 实现可重入逻辑：在 tryAcquire 方法中，检查当前线程是否已经持有锁，如果是，则增加锁的持有次数（通过 state 变量）；如果不是，尝试使用 CAS操作来获取锁。
   - 在 tryAcquire 方法中，按照队列顺序来获取锁，即先检查等待队列中是否有线程在等待，如果有，当前线程必须进入队列等待，而不是直接竞争锁。
   - 创建锁的外部类：创建一个外部类，内部持有 AbstractQueuedSynchronizer 的子类对象，并提供 lock 和 unlock 方法，这些方法将调用 AbstractQueuedSynchronizer 子类中的方法。
+
+- CAS存在什么问题，应用场景有哪些
+  - ABA 问题
+    - 值从 A → B → A，CAS 检查时看到值没变，误以为没有被修改过。
+    - 解决方案：使用 版本号机制，即 带版本戳的 CAS。
+  -  自旋（Spin）开销大
+    - CAS 在失败时会不断重试（自旋），高并发下可能会占用大量 CPU。
+    - 解决方案：限制自旋次数
+  - 只能保证一个变量的原子性
+    - 解决方案：使用 AtomicReference 封装多个变量；
+  - 应用场景：
+    -  原子类（AtomicInteger、AtomicBoolean 等）
+    - ConcurrentHashMap
+    - AQS（AbstractQueuedSynchronizer
+    - 
+
 
 
 - JAVA中的异常捕获
@@ -391,6 +469,102 @@
         - 如果服务器已经收到了部分数据但没收完：服务器可能丢弃请求或返回错误（如 400、408）。
         - 客户端一般不会自动重试非幂等请求（如 POST），以免造成重复提交。 
 
+- MTU
+  - MTU（Maximum Transmission Unit，最大传输单元） 指的是一次可以在网络层传输的最大数据包大小（不含链路层头部）。
+  - 常见情况下 MTU = 1500 字节（特别是在以太网环境）。应用层实际能传输的 TCP 数据（MSS）约为 1460 字节。    
+  - 如果数据包超过 MTU，会被 分片（Fragmentation）；
+  - 分片会导致性能下降；
+  - 在 VPN、隧道、MPLS 环境中，还可能引发 “路径 MTU 问题”（PMTU 黑洞）。
+
+- PMTU
+  - PMTU（Path MTU） = 从源到目的地路径上，所有链路中最小的 MTU 值。
+  - PMTU 发现机制（Path MTU Discovery）
+    - 为避免分片，IP 协议设计了 PMTU Discovery (PMTUD) 机制：
+    - 发送方发包时，设置：IP头中的 DF(Don’t Fragment) = 1，表示“禁止中途分片”。
+    - 如果中途某个路由器发现包太大、自己 MTU 不够
+      - 丢弃该包
+      - 并返回一个 ICMP "Fragmentation Needed" (Type 3, Code 4) 消息；
+      - 告诉发送方：“我这里 MTU = XXX”。  
+    - 发送方据此降低包大小（更新路径 MTU），直到能成功传输。
+  - PMTU 黑洞是什么？
+    - 有些防火墙或路由器 拦截或丢弃了 ICMP 消息。
+    - 路由器丢包了；但发送方 收不到 ICMP 通知；因为 DF=1，又不能分片；所以发送方永远不知道该减小包大小。
+  - 解决方案： 
+    - 允许 ICMP "Fragmentation Needed" 通过
+    - 禁用 DF 位（允许分片）  
+    -  手动调整 MTU
+
+- 常见的请求头内容 content-type有什么
+  - 常见的请求头内容 
+    - 通用头（General）：和请求整体有关
+      - Host：指定目标主机和端口；
+      - Connection：是否保持连接（如 keep-alive）。
+    - 实体头（Entity）：描述请求体内容
+      - Content-Type：说明请求体类型（如 application/json、multipart/form-data）；
+      - Content-Length：请求体长度。
+    - 客户端信息头（Client Info）：描述客户端信息，比如
+      - User-Agent：浏览器或客户端信息；
+      - Accept、Accept-Language、Accept-Encoding：声明可接受的响应格式、语言、压缩方式。
+    - 认证与安全相关头（Auth & Security）：
+      - Authorization：携带令牌（JWT / Basic Auth）；
+      - Cookie：传递登录状态。
+    - 跨域与自定义头（CORS / Custom）：
+      - Origin：跨域请求源；
+
+- 认证头只能是authorization吗
+  - 认证头不只能是 Authorization，但标准规定它是唯一正式的认证字段。在 HTTP 标准（RFC 7235 / RFC 9110） 中，Authorization 是唯一被标准定义的用于客户端向服务器传递认证信息的请求头。
+  - 实践中：可以起别名，但属于“自定义请求头”
+  - 自定义头不是“标准认证头”，它不会被某些中间件（如 Nginx、Spring Security）自动识别处理； 你需要自己解析。
+  - 跨域（CORS）时必须显式允许，浏览器会先发一个 OPTIONS 预检请求。后端必须允许这个头：
+
+
+
+  - HTTP 请求头里的 Content-Type 是非常重要的一个字段，用来声明请求或响应的实体内容（body）类型，告诉服务器（或客户端）数据是以什么格式传输的。
+  - 常见的 Content-Type 类型分类
+    - 文本类型
+      - text/plain 纯文本 普通字符串请求、日志上传
+      - text/html HTML文本 网页内容（HTML 页面）
+      - text/css 前端样式文件
+      - text/javascript 	前端脚本
+      - text/xml XML 数据传输
+    - 表单类型（Form）
+      - application/x-www-form-urlencoded   默认表单格式，键值对以 key1=value1&key2=value2 方式编码  普通 HTML 表单提交
+      - multipart/form-data 用于上传文件，数据被分块传输  
+      - text/plain 简单表单文本上传 
+    -  JSON / XML / 结构化数据
+    - 文件与二进制数据
+      - 二进制流 
+      - PDF
+      - ZIP
+      - 图片文件
+      - 音视频文件
+
+
+- 常见的返回状态码
+  - 1xx表示请求已被接收，正在继续处理。
+  - 2xx表示请求已成功被接收、理解并接受
+  - 3xx 重定向告诉客户端去别的地方获取资源。如 400 参数错误、401 未授权、403 禁止、404 未找到
+  - 4xx 客户端错误表示请求有问题，客户端需要修改请求。如 400 参数错误、401 未授权、403 禁止、404 未找到；
+  - 5xx 服务器错误 ，500 内部错误、502 网关错误、503 服务不可用。
+
+- 永久重定向和临时重定向区别
+  - 永久重定向浏览器会缓存重定向结果，下次访问不再请求原 URL，临时重定向不缓存，下次仍访问原 URL
+  - 永久重定向搜索引擎会将旧地址的权重转移给新地址
+  - 永久重定向一次后浏览器直接跳过短链接服务器，无法统计访问量
+  - 永久重定向不能跳转目标修改
+
+- 输入一个表单用的是什么格式的
+  - 普通表单（默认）application/x-www-form-urlencoded登录、注册、搜索 
+  - 文件上传：multipart/form-data 上传图片，文件
+  - JSON 提交（JS 手动发） application/json   
+
+
+- OSI七层和TCP四层网络模型 每层干什么，有什么协议
+  - #image("Screenshot_20251103_111021.png")
+  - #image("Screenshot_20251103_111035.png")
+
+
+
 - 输入一段URL，整个过程发生了啥
   - URL解析，分析 URL 所需要使用的传输协议和请求的资源路径。
     - 如果输入的 URL 中的协议或者主机名不合法，将会把地址栏中输入的内容传递给搜索引擎。
@@ -467,6 +641,109 @@
     - 实际底层还是实现了 Runnable。
   - 实现 Callable 接口 + FutureTask
     - 如果你需要 线程有返回值 或 抛出异常，必须使用 Callable。
+
+
+
+- 怎么保证a，b两个线程顺序执行
+  - 使用 Thread.join()
+    - join() 会让当前线程等待目标线程执行完成。
+    ```java
+        public class Main {
+        public static void main(String[] args) throws InterruptedException {
+            Thread a = new Thread(() -> {
+                System.out.println("A 开始执行");
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                System.out.println("A 执行结束");
+            });
+
+            Thread b = new Thread(() -> {
+                System.out.println("B 开始执行");
+                System.out.println("B 执行结束");
+            });
+
+            a.start();    // 启动A
+            a.join();     // 等待A执行完毕
+            b.start();    // 再启动B
+        }
+    }
+
+    ```
+  - 使用 CountDownLatch
+    - CountDownLatch 内部有一个计数器。
+    - b 调用 await() 时阻塞。
+    - 当 a 调用 countDown() 后计数器为 0，b 解除阻塞执行。  
+
+  - 使用 Future / ExecutorService
+    - Future.get() 会阻塞直到任务完成，因此可以确保 A 完成后再执行 B。
+    ```java
+        import java.util.concurrent.*;
+
+    public class Main {
+        public static void main(String[] args) throws Exception {
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+
+            Future<?> futureA = executor.submit(() -> {
+                System.out.println("A 执行中...");
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+                System.out.println("A 执行完毕");
+            });
+
+            // 等待A执行完再执行B
+            futureA.get();
+            executor.submit(() -> System.out.println("B 执行中...")).get();
+
+            executor.shutdown();
+        }
+    }
+ 
+    ```
+
+  - 使用 ReentrantLock + Condition
+    - B调用lock.Lock()后执行condition.await()。
+    - A执行完后调用condition.signal()唤醒B。
+
+  - 只有lock不行
+  ```
+    public class test3 {
+
+            static Lock lock = new ReentrantLock();
+
+            public static void main(String[] args) {
+                Thread a = new Thread(() -> {
+                    lock.lock();
+                    try {
+                        System.out.println("A 执行中...");
+                        Thread.sleep(1000);
+
+
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        lock.unlock();
+                    }
+                });
+
+                Thread b = new Thread(() -> {
+                    lock.lock();
+                    try {
+
+                        System.out.println("B 执行中...");
+                    }
+                    finally {
+                        lock.unlock();
+                    }
+                });
+
+
+                a.start();
+                b.start();
+
+        }
+
+    }
+
+  ```
+  - 如这段代码，a和b线程虽然启动顺序是a先b后，但是lock锁并不能保证a先执行完再执行b，start() 只是通知 JVM 调度器去启动线程；实际上 A、B 何时真正运行 是由操作系统线程调度决定的；
 
 
 - 线程池原理及拒绝策略
@@ -560,6 +837,25 @@
     - 单线程定时任务池，单线程版本的定时线程池
   - 自定义线程池（推荐方式）阿里巴巴《Java开发手册》不建议直接使用 Executors 创建线程池，因为容易出现 资源耗尽（OOM） 风险
 
+- 线程池和直接NEW线程的区别是什么
+  - 直接 new Thread() = 每次都新建线程，用完就扔。
+  - 线程池 = 创建一组可复用线程，任务结束后线程不会销毁，而是留着继续执行其他任务。
+  - 性能差异
+    - 直接 new 线程：频繁创建和销毁线程，开销大，性能低。
+    - 线程池：线程复用，减少创建销毁开销，性能更好。
+  - 资源管理
+    - 直接 new 线程：无法控制线程数量，可能导致资源耗尽。
+    - 线程池：可以设置最大线程数，合理利用系统资源。
+  - 任务调度  
+    - 直接 new 线程：任务提交后立即执行，无法排队。
+    - 线程池：可以使用阻塞队列排队任务，按顺序执行。
+  - 系统稳定性
+    - 直接 new 线程：大量线程可能导致系统不稳定。
+    - 线程池：通过限制线程数，提高系统稳定性。
+  - 代码维护
+    - 直接new线程：代码分散，难以维护。
+    - 线程池：集中管理线程，代码更清晰易维护。 
+
 
 - JVM内存模型
   - JVM的内存结构主要分为以下几个部分：
@@ -571,6 +867,19 @@
     - 运行时常量池：是方法区的一部分，用于存放编译期生成的各种字面量和符号引用，具有动态性，运行时也可将新的常量放入池中。当无法申请到足够内存时，会抛出 OutOfMemoryError 异常。
     - 直接内存：不属于 JVM 运行时数据区的一部分，通过 NIO 类引入，是一种堆外内存，可以显著提高 I/O 性能。直接内存的使用受到本机总内存的限制，若分配不当，可能导致 OutOfMemoryError 异常。
 
+- 字符串常量池在哪
+  - JDK 6 及以前在永久代 
+  - JDK 7及以后在堆，jdk8以后永久代删除
+  - 为什么从永久代移到堆
+    - 在 JDK 6 时，字符串常量池放在永久代，容易导致：
+      - 类加载多、字符串常量多时，永久代溢出（OOM: PermGen space）
+      - 回收效率差，因为永久代由 Full GC 才能清理
+    - JDK 7 把它挪到堆中，带来好处：
+      - 堆空间更大、可调节；
+      - GC 更灵活（年轻代 GC、CMS、G1 都能处理字符串对象）；
+      - 避免因字符串过多导致永久代溢出。
+
+
 - 堆的结构：新生代（Young Gen） + 老年代（Old Gen） 
   - 新生代是 大多数新对象 被创建的地方。它又分为三块：
     - Eden 区：新对象首先分配在这里。当 Eden 区满时，会触发 Minor GC，将存活的对象移动到 Survivor 区。
@@ -580,12 +889,12 @@
     - 比例默认约为 8:1:1（可通过 -XX:SurvivorRatio=8 调整）。
   - Minor GC 流程
     - 对象创建在 Eden；
-    - 当Eden区满时，会触发一次Minor GC（新生代垃圾回收）。
+    - 当Eden区满时，会触发一次Minor GC（新生代垃圾回收）。 Stop-The-World
     - GC 会扫描
       - 存活下来的对象会被移动到其中一个Survivor空间,存活次数（Age）+1
       - 这两个区域轮流充当对象的中转站，帮助区分短暂存活的对象和长期存活的对象。
     - 若对象在多次 Minor GC 后仍然存活（超过 MaxTenuringThreshold 次，默认15），则晋升到 老年代； 
-    - 老年代中的对象生命周期较长，因此Major GC（也称为Full GC，涉及老年代的垃圾回收）发生的频率相对较低，但其执行时间通常比Minor GC长。
+    - 老年代中的对象生命周期较长，因此Major GC（也称为Full GC，涉及老年代的垃圾回收）发生的频率相对较低，但其执行时间通常比Minor GC长。Stop-The-World
   - 对象晋升机制（Tenuring）
     - 每个对象在 Survivor 区都会有一个“年龄（Age）”计数器：
       - 每经历一次 Minor GC 并存活下来，Age +1；
@@ -593,10 +902,62 @@
       - 也可能因为 Survivor 区空间不足而提前晋升（称为“空间担保”）。
   -     大对象区（Large Object Space / Humongous Objects）:在某些JVM实现中（如G1垃圾收集器），为大对象分配了专门的区域，称为大对象区或Humongous Objects区域。大对象是指需要大量连续内存空间的对象，如大数组。这类对象直接分配在老年代，以避免因频繁的年轻代晋升而导致的内存碎片化问题。
 
+- Survival区可以怎么优化
+  - Survivor 区（又叫 Survival 区，S0/S1） 是新生代（Young Generation）的一部分，用来在 Minor GC 时保存从 Eden 区“幸存”的对象。
+  - 优化 Survival 区的意义在于：减少对象过早晋升到老年代（Old Gen），从而减轻 Full GC 压力。
+  - 优化方向一：调整 Survivor 区大小比例
+    - -XX:SurvivorRatio=8
+    - 表示 Eden : Survivor = 8 : 1 : 1
+    - 即新生代共 10 份，Eden 占 8，两个 Survivor 各占 1。
+    - 默认是 8，可以适当调大或调小：
+    - Survivor 太小会导致对象直接晋升老年代
+    - Survivor 太大造成 Eden 区浪费、GC 频繁
+  - 优化方向二：控制对象晋升阈值（Tenuring）
+    - -XX:MaxTenuringThreshold=15
+    - 对象在 Survivor 区经历几次 GC 后会晋升老年代。
+    - 默认 15（最大值），有些 GC（如 G1）会自动调整。
+    - 短命对象多（大量瞬时对象）设小一点，比如 3~5快速回收这些对象
+    - 中等生命周期对象多设大一点，比如 10~15	延迟晋升，减少老年代压力
+  - 优化方向三：启用动态年龄判定机制
+    - JVM 可能根据 Survivor 的使用情况自动调整对象晋升年龄：
+    - -XX:+UseAdaptiveSizePolicy
+  - 为什么短命对象多要设置“小阈值”
+    - 短命对象虽然很快会死，但：
+      - 它们第一次 GC 幸存下来（复制进 Survivor）
+      - 第二次 GC 又被扫描、复制
+      - 反复经历多次 Survivor→Survivor 的拷贝
+      - 每次都要复制存活对象、扫描引用，浪费 CPU。
+    - 当阈值小（比如 3）
+      - 对象最多经历 3 次 Minor GC；
+      - 很多中期对象在第 3 次就晋升老年代；
+      - 短命对象在 1~2 次 GC 内就会被清理，不会反复复制。降低 Minor GC 停顿时间，提升吞吐量
+
+
+
+- 元空间参与垃圾回收吗，回收什么
+  - 参与，但方式不同于 Java 堆。
+  - 元空间中的对象（例如类元数据）不是 GC 的主要目标，因为它们只有在类被卸载时才可能被清理。
+  - 当类被卸载（class unloading）时，其对应的元数据才会被 GC 释放。
+  - 也就是说：元空间的回收实质上是类卸载的过程。
+  - 什么情况下类会被卸载？
+    - 该类的所有实例都被回收；
+    - 加载该类的 ClassLoader 被回收；
+    - 没有任何地方再引用该 Class 对象。
+  - 元空间回收的具体内容
+    - 类的元数据（metadata）
+    - 方法信息（method info）
+    - 字段信息（field info）
+    - 常量池
+    - 方法表、接口表
+    - 运行时注解信息
+    - ClassLoader 相关的元数据
+
+
 - MAJORGC和FULLGC不一样
   - MAJORGC只清理老年代
   - FULLGC清理整个堆，包括新生代和老年代，有时还包括方法区
   #image("Screenshot_20251026_223852.png")
+
 - 垃圾回收算法
   - 标记清除 
     - old 
@@ -614,10 +975,47 @@
     - 空间浪费一半 
     - 将内存分为两块（From 和 To）；每次只使用其中一块；回收时，把存活对象复制到另一块，然后清空旧区。
   - 分代收集 
-    - 高性能 
+    - 高性能  
     - 实现复杂
     - 划分为新生代，老年代，元空间
-    - 新生代minorGC，老年代fullgc或majorgc
+    - 新生代minorGC回收 Eden + Survivor，老年代fullgc或majorgc全堆标记整理（非常慢），Mixed GC（G1）“混合回收”一部分老年代（高垃圾比例的 Region）+ 新生代的所有 Region。
+
+- 判断垃圾算法
+  - 引用计数算法
+    - 每个对象都有一个引用计数器；
+    - 每当有一个地方引用它，计数 +1；
+    - 引用失效时，计数 -1；
+    - 当计数变为 0 时，对象被认为是垃圾。
+    - 缺点：
+      - 无法处理循环引用问题：A -> B, B -> A  相互引用，引用计数都不为0，但都不可达
+      - 多线程下计数操作成本高。
+      - 维护计数器开销大；
+  - 可达性分析算法
+    - 从一组称为 GC Roots（根对象） 的起始点出发；
+    - 通过引用关系向下搜索；
+    - 能被 GC Roots 直接或间接引用 的对象为“存活对象”；
+    - 没被连接到任何 GC Roots 的对象被视为“垃圾”。
+    - GC Roots 通常包括：
+      - 虚拟机栈中引用的对象（局部变量等）；
+      - 方法区中静态变量引用的对象；
+      - JNI 引用的对象（native 方法）；
+      - 活动线程对象本身。
+    - 被标记为“不可达”并不一定马上回收，GC 会再做两次判断：
+      - 是否覆写了 finalize() 方法；
+      - 如果有，则会给它一次“自救”的机会（即在 finalize() 中重新建立引用）；
+      - 如果仍然不可达，则被认定为真正的垃圾。
+    - 即使对象“不可达”，也可能暂时被保留，例如：
+      - 被 SoftReference / WeakReference 引用；
+        - 软引用（SoftReference） 
+          - 内存不足时回收
+        - 弱引用（WeakReference）
+          - 下一次 GC 就回收
+        - 虚引用（PhantomReference）
+          - 随时可回收，不可直接访问对象  
+      - 处于老年代，GC 未触发；
+      - 仍在 finalize() 执行期间。
+ 
+
 
 - 垃圾收集器
   - Serial收集器（复制算法): 新生代单线程收集器，标记和清理都是单线程，优点是简单高效；
@@ -878,13 +1276,13 @@
     - hash（字典 / hashtable）
       - 作用：用来根据 成员（member）快速查分值（score）。
       - 场景：当你要执行 ZSCORE key member、ZINCRBY key member 这样的操作时，通过 hash 能快速定位。
-    - skiplist（跳表）
+    - skiplist（跳表）  
       - 作用：用来根据 分值（score）排序成员，支持范围查询和排名操作。
       - 结构：类似多层链表结构，可以实现有序查找。
       - 时间复杂度：O(logN)。 
   - 底层编码优化：ziplist 与 skiplist 的切换
-    - ZSet 有两种编码方式：
-      - ziplist（压缩列表）
+    - ZSet 有两种编码方式： 
+      - ziplist（压缩列表）   
       - skiplist + dict（标准结构）
     - ziplist 的作用（小数据优化）
       - 当 ZSet 中的元素数量较少且每个元素的数据较短时，Redis 会用 ziplist（压缩列表） 存储，以节省内存。
@@ -910,7 +1308,7 @@
   ZADD myRank 150 carol
  
   ```
-  - 成员查分值 → 用 hashtable（member → score）分值查成员 → 用 skiplist（score → member）
+  - 成员查分值 → 用 hashtable（member → score）分值查成员 → 用 skiplist（score → member），所以跳表在任意水平层都是 按 score 升序排列的。
   - myRank 这个 key 本身 是存放在 Redis 全局的哈希表（dict） 中，它对应的 value 是一个 ZSet 对象（有序集合对象）
   - dict 是 Redis 自己实现的一种哈希表结构，用来存储 “key → value” 的映射关系。
   - Redis 自己实现的 dict，比普通哈希表更复杂一些，因为它支持 渐进式 rehash（扩容）。当 dict 装满到一定比例后，Redis 不会一次性扩容（那样会卡顿），而是采用 渐进式 rehash：
@@ -924,6 +1322,23 @@
     - Redis 中一个 score 可能对应多个 member，跳表更容易处理“重复分值”的情况。
     - 跳表实现简单，范围查询更方便（可以顺序遍历）。    
 
+  - 如命令 ZADD myRank 100 alice
+    - myRank 是 Redis数据库中的 key，对应一个 ZSET 类型的 value。
+    - 内部哈希表的 key 是 ZSET成员名，也就是 alice。内部哈希表的 value 是 指向跳表节点的指针（或早期版本存 score）。
+
+
+
+- Redis 的 zset 中删除并重新插入数据的时间复杂度是多少？
+  - Redis 的 ZSET 底层是 跳表（skiplist）+ 哈希表 的组合：
+  - 删除元素需要
+    - 在哈希表中查找元素：O(1)
+    - 在跳表中删除元素：O(logN)
+  - 插入元素需要
+    - 在哈希表中插入元素：O(1)
+    - 在跳表中插入元素：O(logN)
+
+- 压缩列表如何保证按score排序的
+  - 当你插入新元素时，Redis 会 从头遍历压缩列表，找到 第一个 score 大于目标 score 的位置，然后将新元素插入到这个位置。
 
 - 了解过redis中的spark嘛？
   #image("Screenshot_20251027_164351.png")
@@ -944,8 +1359,6 @@
     - 任务调度：Spark 的调度器将任务分配给集群中的工作节点，并协调任务的执行。
     - 内存计算：Spark 利用内存中的数据进行计算，减少了磁盘 I/O，提高了处理速度。
     - 结果输出：计算结果可以存储在内存中，也可以写入外部存储系统（如 HDFS、数据库等）。
-
-
 
 - redis的stream和MQ的区别
   #image("Screenshot_20251020_195146.png")
@@ -973,6 +1386,85 @@
     - 使用 Redis Cluster 分片扩展；
     - 控制 key 的 哈希标签（HashTag） 保持相关性；
 
+- Redis哨兵和分片
+  -  Redis 哨兵（Sentinel）
+    - 提供高可用（HA）机制，主要解决单节点 Redis 宕机后的自动故障转移问题。
+    - 监控：Sentinel 持续监控主从节点的状态。
+    - 自动故障转移：当主节点不可用时，Sentinel 会选举新的主节点，并通知客户端更新。
+    - 配置提供者：客户端可以通过 Sentinel 获取最新的主节点地址。
+  - Redis 分片（Sharding）
+    - 解决单节点容量和性能瓶颈，把数据水平拆分到多个节点上。
+    - 客户端分片（Client-side Sharding）
+      - 客户端根据 key 计算哈希，决定请求哪个 Redis 节点。
+      - 缺点：节点增加/减少时，哈希重排需要迁移大量数据
+    - Proxy 分片（如 Twemproxy）
+      - 客户端只连接 Proxy，Proxy 管理数据分片。
+    - 客户端只连接 Proxy，Proxy 管理数据分片。
+      - Redis Cluster 将 key 空间划分为 16,384 个 slot，每个节点负责部分 slot。
+    - 哨兵 + 分片
+      - 每个分片都可以是一个主从集群，由 Sentinel 管理。
+  - Redis 哨兵（Sentinel）为什么通常要至少 3 个，而不能只有 2 个，这其实是分布式系统“选举机制 + 容错性”的结果。
+    - 哨兵的职责
+      - 监控主从实例是否存活
+      - 在主节点宕机时选出新的主节点
+    - 但！选主节点时不能单个哨兵自己说了算，必须经过多数派（majority）投票同意。
+    - 至少要有 ⌈N/2⌉ + 1 个哨兵同意，才能进行主节点故障转移。
+    - 2 个哨兵的情况：如果有 1 个哨兵挂了，剩下 1 个无法形成“多数派”。
+
+
+
+
+
+- 如何处理Redis中的热点Key问题？可能引发什么问题？有哪些解决方案？
+  - 什么是热点 Key
+    - 在短时间内被大量请求访问（读或写）的某个 Key，远高于平均访问量。
+  - 热点 Key 会引发什么问题？
+    - Redis 是单线程处理命令的（除非启用多线程 IO），热点 Key 导致大量请求集中到一个节点的一个 Key 上，导致单核 CPU 飙高、处理阻塞
+    - 所有请求都打向同一个 Redis 节点，网络流量集中，连接数激增
+    - 热点 Key 过期时，大量请求同时打到数据库，数据库被打垮
+    - Redis Cluster 中不同节点负载差异极大，某节点 QPS 高，其他节点空闲
+  - 缓存副本分摊读压力
+    - Redis 主从架构，将读流量分散到多个从节点；
+    - 应用层实现 读写分离（写主、读从）；
+    - 或使用 Redis Cluster 分片并手动做“副本扩散”。
+    - 缺点：热点仍集中在同一个 Key 上，主从间同步延迟可能造成不一致。
+  - 本地缓存（多级缓存）
+    - 在应用端增加一层 本地缓存（Guava Cache / Caffeine / Ehcache）；
+    - 每次从 Redis 取值后，缓存到本地内存；
+    - 多实例时还可使用 定期刷新 + 失效通知。
+    - 缺点： 数据一致性差、占内存。
+  - Key 拆分 / 热点分片
+    - 将一个热点 Key 分成多个小 Key
+    - 写操作随机打到其中一个；
+    - 读操作时再汇总求和。
+    - 缺点： 读操作略复杂，需要聚合。
+  -  缓存预热 + 永不过期 / 延迟过期
+    - 热点 Key 提前写入 Redis；
+    - 设置较长 TTL，或者不设置过期；
+    - 用后台任务周期性刷新。
+  - 用互斥锁或信号量保证同一时刻只有一个线程回源数据库；其他线程等待该线程加载完毕后再返回结果。
+  - 限流 + 降级
+    - 对热点接口进行限流；
+    - Redis 异常或延迟时使用降级策略（返回缓存数据或默认值）。
+  - 异步更新与消息队列
+    - 请求先写入 MQ；
+    - 后台消费者异步批量更新 Redis；
+    - 再定期同步到数据库。
+  - 检测热点 Key 的方法
+    - Redis 命令
+    ```
+    redis-cli --bigkeys
+    redis-cli monitor | grep hotkey
+
+    ```
+    - Redis 热点 Key 采样
+      - 使用 redis-cli --latency、--stat 查看延迟；
+      - 使用 INFO commandstats 分析命令执行频率；
+      - 开启 hot key sampling（Redis 4.0+）：
+      ```
+      CONFIG SET hotkeys-tracking yes
+
+      ```
 
 - 若Redis在执行过程中掉电或集群网络短暂中断，如何恢复数据？如何保证数据一致性？是否存在不一致的时机？
   - Redis 掉电或网络中断后的数据恢复机制
@@ -1022,7 +1514,23 @@
 
 
 
+- 将本地缓存扩展为 Redis 集群后，如何确定某个 key 存储在哪个机器上？
+  - Redis Cluster 并不是随机存放数据的，而是将整个键空间划分为 16384 个槽（Slot）。
+    - Redis 使用 CRC16 哈希算法计算每个 key 的哈希值；然后对 16384 取模得到SLOT
+    - 每个 Redis 节点负责一部分连续的 slot 区间。
+    - 只要知道 key 对应的 slot 值，就能立即知道它归属于哪个节点。
+  - 特殊情况：Hash Tag（哈希标签）
+    - 有时你希望多个 key 落在同一个 slot：如 
+    ```
+    mget user:{1001}:name user:{1001}:age
 
+    ```
+    - Redis 会只取 {} 内的部分来计算 slot：
+    ```
+    slot = CRC16("1001") % 16384
+
+    ```
+    - 这样两个KEY会落到同一个节点上
 
 
 - redis的主从同步是怎么实现的
@@ -1065,7 +1573,7 @@
       - 主节点重启了（runid 改变）
       - 从节点第一次加入复制集
       - 主从数据不一致（人为修改或过期）
-  
+
   - 主从同步的间隔
     - Redis 主从同步不是定时拉取的
       - Redis 的主从复制是事件驱动 + 异步推送机制，
@@ -1189,6 +1697,7 @@
       - C 语言的字符串标准库提供的字符串操作函数，大多数（比如 strcat 追加字符串函数）都是不安全的，因为这些函数把缓冲区大小是否满足操作需求的工作交由开发者来保证，程序内部并不会判断缓冲区大小是否足够用，当发生了缓冲区溢出就有可能造成程序异常结束。
       - 所以，Redis 的 SDS 结构里引入了 alloc 和 len 成员变量，这样 SDS API 通过 alloc - len 计算，可以算出剩余可用的空间大小，这样在对字符串做修改操作的时候，就可以由程序内部判断缓冲区大小是否足够用。
       - 而且，当判断出缓冲区大小不够用时，Redis 会自动将扩大 SDS 的空间大小，以满足修改所需的大小。
+
 
 - Redis实现并发锁的方式
   - setnx
@@ -1439,6 +1948,9 @@
     - poll 使用一个可变长的数组 pollfd[]，数量只受系统内存限制。不再受 FD 数量限制
     - poll 的 events 支持更精细的事件，如 POLLIN, POLLOUT, POLLERR, POLLHUP 等，比 select 的 read/write/exception 更灵活。
 
+- Redis 网络 IO 瓶颈是什么？
+  - 指客户端与 Redis 之间的socket 通信过程：数据包收发、TCP 读写、内核缓冲区拷贝等。
+  - 即使命令执行极快（微秒级），网络传输、系统调用、协议解析仍可能占主要耗时。
 
 - TCP三次握手过程说一下？
   - 一开始，客户端和服务端都处于 CLOSE 状态。先是服务端主动监听某个端口，处于 LISTEN 状态
@@ -1568,6 +2080,19 @@
     - ConditionalOnProperty 根据配置属性的值决定是否生效
     - ConditionalOnBean 当某个 Bean 存在时才生效
     - ConditionalOnWebApplication 仅在 Web 应用环境下生效
+
+- Spring Boot 自动装配原理
+  - SpringBoot 的自动装配原理是基于Spring Framework的条件化配置和\@EnableAutoConfiguration注解实现的。这种机制允许开发者在项目中引入相关的依赖，SpringBoot 将根据这些依赖自动配置应用程序的上下文和功能。
+  - SpringBoot 定义了一套接口规范，这套规范规定：SpringBoot 在启动时会扫描外部引用 jar 包中的META-INF/spring.factories文件，将文件中配置的类型信息加载到 Spring 容器（此处涉及到 JVM 类加载机制与 Spring 的容器知识），并执行类中定义的各种操作。对于外部 jar 来说，只需要按照 SpringBoot 定义的标准，就能将自己的功能装置进 SpringBoot。
+  - 通俗来讲，自动装配就是通过注解或一些简单的配置就可以在SpringBoot的帮助下开启和配置各种功能，比如数据库访问、Web开发。
+  - \@EnableAutoConfiguration: 这个注解是 Spring Boot 自动装配的核心。它告诉 Spring oot 启用自动配置机制，根据项目的依赖和配置自动配置应用程序的上下文。通过这个注解，SpringBoot 将尝试根据类路径上的依赖自动配置应用程序。
+  - \@AutoConfigurationPackage，将项目src中main包下的所有组件注册到容器中，例如标注了Component注解的类等
+  - \@Import({AutoConfigurationImportSelector.class})，是自动装配的核心，接下来分析一下这个注解
+    - AutoConfigurationImportSelector 是 Spring Boot 中一个重要的类，它实现了 ImportSelector 接口，用于实现自动配置的选择和导入。具体来说，它通过分析项目的类路径和条件来决定应该导入哪些自动配置类。
+      - 扫描类路径: 在应用程序启动时，AutoConfigurationImportSelector 会扫描类路径上的 META-INF/spring.factories 文件，这个文件中包含了各种 Spring 配置和扩展的定义。在这里，它会查找所有实现了 AutoConfiguration 接口的类,具体的实现为getCandidateConfigurations方法。
+      - 条件判断: 对于每一个发现的自动配置类，AutoConfigurationImportSelector 会使用条件判断机制（通常是通过 \@ConditionalOnXxx注解）来确定是否满足导入条件。这些条件可以是配置属性、类是否存在、Bean是否存在等等。
+      - 根据条件导入自动配置类: 满足条件的自动配置类将被导入到应用程序的上下文中。这意味着它们会被实例化并应用于应用程序的配置。
+
 
 
 -  标准Web项目（如基于Spring MVC的HTTP服务）中，Spring Boot提供了哪些模块来实现相关能力？其集成能力如何？
@@ -1723,11 +2248,19 @@
     - 一级缓存（singletonObjects）最终交付完整Bean。
   - 整个机制通过中断初始化流程、逆向注入半成品、延迟代理生成三大策略，将循环依赖的死结转化为有序的接力协作。
   - 值得注意的是，此方案仅适用于Setter/Field注入的单例Bean；构造器注入因必须在实例化前获得依赖，仍会导致无解的死锁。
+
+
 - Spring为什么用3级缓存解决循环依赖问题？用2级缓存不行吗？
   - Spring 必须用三级缓存解决循环依赖，核心是为了正确处理需要 AOP 代理的 Bean。如果只用二级缓存，会导致注入的对象形态错误，甚至破坏单例原则。
   - 举个例子：假设 Bean A 依赖 B，B 又依赖 A，且 A 需要被动态代理（比如加了 Transactional）。如果只有二级缓存，当 B 创建时去注入 A，拿到的是 A 的原始对象。但 A 在后续初始化完成后才会生成代理对象，结果就是：B 拿着原始对象 A，而 Spring 容器里存的是代理对象 A —— 同一个 Bean 出现了两个不同实例，这直接违反了单例的核心约束。
   - 三级缓存中的 ObjectFactory 就是解决这个问题的关键。它不是直接缓存对象，而是存了一个能生产对象的工厂。当发生循环依赖时，调用这个工厂的 getObject() 方法，这时 Spring 会智能判断：如果这个 Bean 最终需要代理，就提前生成代理对象并放入二级缓存；如果不需要代理，就返回原始对象。这样一来，B 注入的 A 就是最终形态（可能是代理对象），后续 A 初始化完成后也不会再创建新代理，保证了对象全局唯一。
   - 简单说，三级缓存的本质是 “按需延迟生成正确引用” 。它既维持了 Bean 生命周期的完整性（正常流程在初始化后生成代理），又在循环依赖时特殊处理，避免逻辑矛盾。而二级缓存缺乏这种动态决策能力，因此无法替代三级缓存。
+  - 当 A 创建时，A 还没完成，无法立即知道是否需要代理（AOP 是在初始化后才判定的）。
+    - AOP代理的生成，不是在「实例化」或「依赖注入」阶段，而是在：初始化阶段（initializeBean）调用 BeanPostProcessor 的 postProcessAfterInitialization() 时才发生。  
+    - 实例化阶段创建 Bean 的空对象（裸对象），仅调用构造函数
+    - 依赖注入阶段给对象注入依赖（属性赋值）
+    - 初始化阶段	调用各种后置处理器、\@PostConstruct、InitializingBean、生成AOP代理等
+
 - spring三级缓存的数据结构是什么？
   - 都是 Map类型的缓存，比如Map {k:name; v:bean}。
   - 一级缓存（Singleton Objects）：这是一个Map类型的缓存，存储的是已经完全初始化好的bean，即完全准备好可以使用的bean实例。键是bean的名称，值是bean的实例。这个缓存在DefaultSingletonBeanRegistry类中的singletonObjects属性中。
@@ -1739,6 +2272,9 @@
   - Spring 判断一个 Bean 是否要被代理（例如 \@Transactional），是通过扫描其类上的注解、切面表达式、接口匹配等静态信息实现的，根本不用等 Bean 初始化完成
   #image("Screenshot_20251026_112807.png")
 
+
+- AOP在哪一层缓存实现的
+  - 在 Spring 的三级缓存机制中，AOP 代理对象最早是由三级缓存中的 ObjectFactory 创建的，并被放入 二级缓存（earlySingletonObjects） 中，以解决循环依赖问题。所以说——AOP 代理最终出现在二级缓存中，但其创建逻辑源自三级缓存的工厂。
 
 - 什么是IOC 
   - 即控制反转的意思，它是一种创建和获取对象的技术思想，依赖注入(DI)是实现这种技术的一种方式。传统开发过程中，我们需要通过new关键字来创建对象。使用IoC思想开发方式的话，我们不通过new关键字创建对象，而是通过IoC容器来帮我们实例化对象。 通过IoC的方式，可以大大降低对象之间的耦合度。
@@ -1847,6 +2383,62 @@
 
 
 
+- 数据库主从同步延迟导致读脏数据，如何解决?
+  - 为什么会出现“读脏数据”
+    - 主从复制机制本身存在延迟。主从复制一般是：主库写入 → 写 binlog → 从库读取 binlog → 回放执行。如果主库压力大、从库落后（比如网络、IO、SQL 执行慢），就会出现从库延迟几百毫秒甚至几秒的情况。
+  - 解决方案 
+    - 读写分离 + 延迟检测（读主）
+      ```java
+      if (isAfterWriteOperation(userId)) {
+          readFromMaster();
+      } else {
+          readFromSlave();
+      }
+
+      ```
+      - 缺点：增加了读主的压力，降低了读性能。
+    - 写后延迟读（等待主从同步）
+      - 在写完后，等从库追上主库再读。
+      - 基于 binlog 位点（GTID 或 File+Pos）
+        - 记录写入时主库的 GTID；
+        - 查询时要求从库已追到该 GTID 才允许读；
+    - 读写一致性缓存层（推荐）
+      - 写主库后，同时写缓存；
+      - 读时优先读缓存；
+      - 从库落后时不会读出旧数据；
+      - 缓存可在主从同步后自动刷新。
+      - 缓存一致性策略要设计好（写穿、失效）。
+    - 半同步复制 (Semi-sync Replication)
+      - 主库写入后必须等待至少一个从库确认接收 binlog 才返回成功。
+
+- 分库分表后，如何解决跨分片查询?
+  - 为什么分库分表后会有跨分片问题
+    - 某些查询语句无法只在一个分片上完成：
+      - 聚合类查询：SELECT COUNT(\*) FROM user;
+      - 跨分表 JOIN：SELECT \* FROM order o JOIN user u ON o.user_id = u.id;
+      - 全局排序 / 分页：ORDER BY create_time LIMIT 10
+      - 模糊匹配 / 范围查询：WHERE id BETWEEN 1000 AND 2000
+      - 全局唯一约束 / 唯一索引
+  - 跨分片查询常见解决方案
+    - 中间件层统一路由 + SQL 合并（推荐通用方案）
+      - 大多数业务推荐用 ShardingSphere-JDBC（Java 应用内嵌） 或 ShardingSphere-Proxy（独立代理层）；
+      - 原理：
+        - SQL 解析：中间件拦截 SQL，分析路由规则；
+        - 分片路由：判断需要访问哪些分片；
+        - 并行查询：分发 SQL 到对应分片；
+        - 结果合并：将结果集聚合、排序、去重后返回。
+      - 缺点：  
+        - 查询性能受限：跨分片 SQL 聚合代价大；
+        - 中间件成为瓶颈；
+    - 应用层聚合（手动路由 + 合并结果）
+      - 应用程序根据分片键自己决定查询哪些分表；
+      - 在程序中执行多次查询
+      - 在内存中合并结果。
+    - 引入全局索引 / 全局表
+      - 将经常参与关联或查询的关键字段放到一个独立全局索引表；查询时先在索引表定位，再访问目标分片
+    - 使用分布式数据库（自动路由 + 全局视图）
+      - 代表：TiDB、OceanBase、PolarDB、CockroachDB
+
 - MySQL索引的实现原理有哪些？
   - InnoDB 是最常用的存储引擎，它的索引采用 B+ 树（Balance Plus Tree） 结构。 
     - 每个节点是一个数据页（默认16KB）；
@@ -1872,6 +2464,18 @@
     - 实现原理：倒排索引（Inverted Index）；
     - 维护词 -> 文档ID 的映射；
     - 适合文本搜索（如新闻标题、商品描述）。
+
+
+
+- 什么时候联合索引失效
+  - 违反最左匹配原则
+  - 最左列使用了范围查询后再查别的列
+  - like 不是前缀匹配 如'%Tom%' % 开头会导致索引失效
+  - 使用函数或运算
+  - 发生隐式类型转换可能失效
+  - OR 混用未建索引列 WHERE age = 30 OR gender = 'M' gender 无索引导致整体失效
+  - 查询优化器判断全表扫描更优
+
 
 - 用过explain吗？介绍其返回结果中主要字段的意义。
   - EXPLAIN 用于分析 MySQL 查询语句的执行计划，帮助我们了解优化器是如何访问表、使用哪些索引、扫描了多少行数据。
@@ -1953,9 +2557,40 @@
   - SQL 标准的 RR 只保证“已读行不变”，但不锁定查询范围，所以其他事务可以插入新行导致“幻读”。RR 在标准里 ≠ “事务级快照”，而是 “行级锁定可重复读”。
   - InnoDB 的 RR 加了 MVCC + 间隙锁，既能保持行内容一致，又能锁定范围，从而防止幻读。
 
+- 可重复读如何实现的
+  - 可重复读（Repeatable Read）的实现核心是：在同一个事务中，多次读取同一条数据时，保证结果一致，即防止不可重复读。实现方式主要依赖于 锁机制 或 多版本控制（MVCC）
+  - 基于锁的实现（Pessimistic Lock）
+    - 当事务读取数据时，会对读取的行加共享锁（S锁）。
+    - 如果事务要修改数据，会申请排他锁（X锁）。
+    - 其他事务在未释放共享锁前，不能修改这条数据。  
+    - 幻读可能通过范围锁（Range Lock）进一步解决（MySQL InnoDB 可加间隙锁）。
+  - 基于 MVCC 的实现（Optimistic, MySQL InnoDB 的实现方式）
+    - 数据库为每行数据维护一个版本号或时间戳。
+    - 事务开始时，会记录当前数据库版本号（snapshot）。
+    - 事务读取数据时，总是读取该事务开始时存在的最新版本。
+    - 写操作仍然会加行锁，保证写一致性。
+    - 幻读仍可能出现（除非加额外间隙锁）。
+
+
 
 - 三类存储引擎分别支持哪些索引？
   #image("Screenshot_20251018_193137.png")
+  - InnoDB —— B+ Tree 索引 + 聚簇索引
+    - 主键索引：聚簇索引（Clustered Index）
+      - 叶子节点存储整行数据。
+    - 二级索引（辅助索引）：B+ Tree
+      - 叶子节点存储主键值，而非数据本身。
+    - 还使用了 自适应哈希索引（Adaptive Hash Index），自动维护高频查询的哈希缓存。
+  - MyISAM —— B+ Tree 索引 + 非聚簇结构
+    - 主索引与数据分离：
+      - .MYI 文件存索引；
+      - .MYD 文件存数据。
+    - 叶子节点存的是数据文件的物理地址（偏移量）。    
+    - 读操作非常快，但不支持事务与崩溃恢复。
+  - MEMORY —— Hash 索引（默认）或 B+Tree
+    - 默认使用 Hash 索引（等值查找快，范围查找差）；
+    - 也可以手动指定 USING BTREE；
+    - 数据存于内存，掉电即失。
 
 - 不同存储引擎的优缺点？
   - InnoDB
@@ -1973,15 +2608,27 @@
     - 优点
       - 存储格式简单，查询速度快，尤其是 读密集型场景。
       - 全文索引支持早，适合全文搜索。
-      - 占用空间比 InnoDB 小。
-    - Memory
-      - 优点：
-        - 数据 全部存储在内存，读写速度极快。
-        - 支持 表级锁、哈希索引，精确查找速度快。
-      - 缺点：
-        - 数据 断电或重启丢失，不持久化。
-        - 哈希索引只适合精确匹配，范围查询性能差。
-        - 表大小受内存限制，通常用于 临时表或缓存。
+      - 占用空间比 InnoDB 小。   
+    - 缺点：
+      - MyISAM 不支持事务（Transaction），也没有 ROLLBACK、COMMIT、SAVEPOINT 等机制。
+      - 仅支持表级锁（Table Lock）
+      - MyISAM 表结构简单但容易损坏（尤其是异常关机或系统崩溃时）。
+      - 不支持外键（Foreign Key）
+      - 写入性能差（在高并发环境下）
+      - 不支持崩溃恢复与日志（无 redo/undo log）
+    - 以读为主的系统（如日志分析、搜索引擎索引）；
+    - 不要求事务一致性的离线分析场景；
+    - 小型嵌入式应用或内存受限系统。
+  - Memory
+    - 优点：
+      - 数据 全部存储在内存，读写速度极快。
+      - 支持 表级锁、哈希索引，精确查找速度快。
+    - 缺点：
+      - 数据 断电或重启丢失，不持久化。
+      - 哈希索引只适合精确匹配，范围查询性能差。
+      - 表大小受内存限制，通常用于 临时表或缓存。
+  - CSV
+    - 每行数据存成 CSV 文本，易于导入导出
 
 - 聚簇索引和非聚簇索引
   - 聚簇索引：通常是 B+ 树叶子节点存储实际数据行。查询主键数据直接命中叶子节点，无需再回表。
@@ -2212,7 +2859,145 @@
     sqlSession.close();
 
     ```
+- 怎么保证kafka消费的顺序
+  - Kafka 的顺序保证是“分区级别的
+    - Kafka 只能保证同一分区（Partition）内消息的顺序。不同分区之间的消息是无法保证顺序的。
+    - 原因：一个 Topic 通常有多个 Partition；每个 Partition 内消息按偏移量（offset）有序；多个 Partition 并行消费，因此整体上消息到达消费者的顺序可能乱序。
+  - 在同一 Partition 内，Kafka 如何保证顺序？
+    - 日志结构（append-only log）
+      - Kafka 的 Partition 是一个顺序写入的日志文件；
+      - 每条消息都有自增的 offset；
+      - 消费者按 offset 顺序拉取数据，因此天然有序。
+    - 单线程读写
+      - Producer 向某个 Partition 发送消息时是顺序写；
+      - Consumer 在一个 Partition 上消费时也是单线程拉取消息。  
+  - 如果业务要“全局顺序”怎么办？
+    - Kafka 本身无法保证 跨分区顺序，但可以通过“合理分区策略”实现局部顺序或业务内顺序：
+    - 按业务 key（如 userId）做分区
+      - Kafka 会将相同 key 的消息映射到同一个 Partition。
+      - 同一用户的所有消息在同一 Partition 内，自然顺序不乱
+    - 消费者保持单线程消费同一 Partition
+      - 每个 Partition 只能被一个消费者线程消费：
 
+- Kafka 为什么快
+  - 顺序写入日志
+    - Kafka 不像数据库那样频繁随机写磁盘，而是采用 顺序写日志（append-only log） 的方式。
+    - 数据写入时只追加到文件末尾，不做修改或随机插入。
+    - 磁盘顺序写速度非常快（接近内存的速度），可达上百 MB/s
+  - 页缓存（Page Cache）+ 零拷贝（Zero Copy）
+    - Kafka 充分利用了操作系统提供的 Page Cache（文件系统缓存），并通过 零拷贝机制 提升性能：
+      - Page Cache
+        - Kafka 不自己缓存数据，而是依赖 OS 文件系统缓存。
+        - 数据写入文件后会留在 OS 内核缓存中（dirty page），读写都走缓存，避免频繁磁盘 IO。
+      - 零拷贝（Zero Copy） 
+        - Kafka 使用 sendfile() 系统调用，将文件直接从内核缓冲区发送到 Socket。
+        - 避免了 “内核态 ↔ 用户态” 的多次数据拷贝和上下文切换。
+      - 批量发送与压缩（Batch + Compression）
+        - Producer 将多条消息合并成一个 batch 再发送。
+        - Broker 落盘时也按 batch 写入。
+        - Consumer 拉取时一次性取多个 batch。
+        - 此外支持 GZIP、LZ4、ZSTD 等压缩算法，对整个 batch 压缩，大幅降低带宽和磁盘使用。
+      - 顺序读 + 零索引查找
+        - Kafka 的消费是顺序读取日志文件（按 offset），无需复杂索引查找。
+        - 每个 partition 是一个追加日志文件，消费者根据 offset 直接定位位置：
+        - 消费者 offset 存储在独立的 topic（__consumer_offsets）中，轻量又持久。
+      - 分区（Partition）并行 + 多副本复制
+        - 每个 Topic 拆成多个 Partition；
+        - 不同 Partition 可分布在不同 Broker 上；
+        - Producer、Consumer 并发访问不同 Partition；
+        - 副本（replica）异步复制，不阻塞主写流程。
+      - 拉取模型（Pull）代替推送（Push）
+        - Consumer 自己决定何时、拉多少数据；
+        - 减少了 Broker 的推送压力；
+      - 简单的存储结构（Log Segment + Index）
+        - 每个 Partition 是一个 append-only 文件；
+        - 通过 offset + index 文件快速定位；
+        - 不需要复杂的锁竞争（append-only，写锁简单）；
+        - 旧数据只需按 segment 删除（无需 GC）。
+      - 内部线程模型优化
+        - I/O 线程负责网络收发；
+        - 后台线程负责落盘和副本同步；
+        - Reactor 模型（Selector + poll）高并发处理连接；
+        - 少量线程即可支撑成千上万个连接。
+      #image("Screenshot_20251029_204640.png")
+      #image("Screenshot_20251029_204652.png")
+
+- KAFKA如何实现死信队列
+  - Kafka 本身不自动处理死信消息，需要 应用层自己创建一个单独的 topic 作为死信队列
+  - 消费者在消费主Topic时：若多次重试仍失败 → 将该消息发送到死信Topic。
+  - 和rabbitmq不同
+    - RabbitMQ 有内置的死信交换机和队列机制，配置后自动转发死信消息。
+    - Kafka 需要应用代码显式处理死信逻辑。
+
+- 死信队列的作用
+  -	避免失败消息被系统直接丢弃
+  - 防止坏消息反复重试、阻塞正常消费
+  - 可以看到失败消息的内容、时间、异常原因
+  - 可以人工修复或系统定时重新推送
+
+- 消息丢失，消息重复消费怎么解决
+  - 消息丢失
+    - 生产端
+      - ACK
+      - 重试机制（重试次数、间隔）
+      - 持久化消息到数据库即本地消息表（事务消息）
+    - Broker 端
+      - 多副本机制（replication factor ≥ 2）
+      - 开启持久化（RabbitMQ durable queue + persistent message；Kafka 本身通过磁盘日志持久化）
+      - 定期备份
+    - 消费端
+      - 消费者手动 ACK（处理成功后再确认）
+      - 消费位点持久化（offset commit）
+      - 消费确认机制
+  - 消息重复消费
+    - 每条消息带唯一 ID（如订单号、事务 ID）消费者处理前检查数据库是否存在该消息ID的处理记录
+    - 用 Redis SET 或 String 记录已处理消息ID，SETNX messageId true EX 3600
+    - 利用数据库幂等约束唯一索引
+    - 专门的“消息消费表”记录 messageId 和状态
+
+
+- 怎么在mq做订单业务的时候保证事务
+  - 利用 MQ 自身的「半消息（half message）」机制来实现分布式事务。
+    - 缺点：
+      - 并非所有 MQ 支持（RabbitMQ 事务性能差，Kafka 要2.5+版本）
+      - 增加 MQ 管理复杂度（事务回查）
+    - 优点：
+      - 原生支持事务，消息与业务操作强一致
+      - 不依赖外部数据库表
+      - 支持回查机制（MQ 会主动询问事务状态）
+  - 本地消息表（经典方案）
+    - 比如订单业务写入数据库时，同时写入一个消息表，这样，即使后续 MQ 宕机，消息也不会丢失。
+    - 定时任务（或异步线程）扫描消息表：
+      - 读取未发送的消息
+      - 调用 MQ 发送消息
+      - 更新消息状态为已发送
+      - 不断重试，直到 MQ 发送成功为止。
+      
+  - 最终一致性 + 幂等消费（适用于高并发）
+    - 每条消息带唯一 msgId
+    - 消费端保存MSGid的消费状态
+    - 超时未成功处理的消息由补偿任务重发
+
+
+- 消息队列堆积如何快速处理?
+  - 分析堆积原因
+    - 消费者挂了/宕机
+      - 恢复消费者服务
+    - 消费逻辑太慢
+      - 优化消费逻辑
+    - 消息积压分布不均
+      - 	增加分区或调整分配策略
+    - 消费者线程数不足
+      - 提高并发消费
+    - 下游系统（DB/接口）慢
+      - 异步写入或限流下游
+  - 短期“应急”处理方案
+    - 临时扩容消费者实例
+      - 注意：Kafka 分区数决定最大并行度，如果分区不够，消费实例再多也无效。可考虑 临时增加 partition 数量。
+    - 提升消费并发度
+      - 每个消费者实例内使用 线程池并行处理消息
+    - 批量拉取 N 条消息一次处理（减少网络往返）。
+    - 对部分非关键任务（如日志、统计）暂存到本地或缓存中，延迟处理。
 
 - 为何将“丢弃最老消息”作为消息队列满时的拒绝策略？该策略适合什么场景？哪些应用的MQ会侧重时效性？
   - 常见策略
@@ -2258,8 +3043,71 @@
 
 
 
+ - Elasticsearch 构建倒排索引时，文档和分词数量多导致内存占用大，有哪些节省空间、提高性能的办法？
+   - 减少分词数量（源头减量） 
+     - 控制分词粒度（使用合理分词器）
+       - 中文分词器如 ik_max_word 会把句子切得非常碎，产生指数级 term 数量。
+       - 建议改为"analyzer": "ik_smart"
+       - 一般可减少 40%~60% 的 term 数量。
+    - 对不搜索的字段禁用分词
+      - 例如商品的 ID、类别、品牌代码、商户ID、SKU 等，只需精确匹配，不用分词。
+    - 合并字段（减少冗余）
+  - 索引层优化（节省倒排索引空间）
+    - 开启压缩算法
+    - 减少 source 或存储字段
+    - 如果 source 太大（商品描述、图片URL等），可以只保留必要字段
+    - 合理使用 doc_values
+  - 索引过程与 segment 管理优化
+    - 调整 segment merge 策略
+      - 索引构建时，Lucene 会不断合并小 segment → 大 segment，非常耗内存和 CPU。
+    - 调整 refresh 与 flush 策略
+      - 默认 ES 每秒刷新一次内存 buffer 为 segment，产生大量小段。批量导入时可关闭
+  - 运行时内存与 JVM 调优
+    - 增大堆外内存利用率
+      - ES 大部分索引结构（倒排表、FST、term dictionary）在 堆外（off-heap） 管理。
+    - 禁用 fielddata（或按需加载）
+      - fielddata 是 ES 在内存中为 text 字段构建的倒排缓存，非常吃内存。
 
 
+- jvm调参常用参数有哪些
+  #image("Screenshot_20251029_201923.png")
+  - xms 初始堆大小 如：-Xms512m 这是VM 启动时分配的堆内存大小。通常与 -Xmx 设为相同，避免动态扩容。
+  - xmx 最大堆大小 如：-Xmx2g 这是 VM 可使用的最大堆内存大小。根据应用需求和服务器内存设置。	限制 JVM 可用的最大堆内存，防止 OOM。
+  - xmn 年轻代大小 如：-Xmn256m 设置年轻代内存大小。年轻代越大，Minor GC 越少，但会占用更多堆空间。
+  - xss 线程栈大小 如：-Xss512k 设置每个线程的栈大小。栈太小可能导致 StackOverflowError，太大可以有更多线程空间但线程数受限。
+  - -XX:MetaspaceSize / -XX:MaxMetaspaceSize 元空间初始 / 最大大小 如：	-XX:MaxMetaspaceSize=256m
+  - -XX:+UseG1GC 启用 G1 垃圾收集器 适用于大内存应用，低延迟需求。
+  - -XX:+UseConcMarkSweepGC 启用 CMS 垃圾收集器 适用于低延迟应用，但已被 G1 取代。
+  - -XX:+UseParallelGC 启用并行垃圾收集器 适用于吞吐量优先的应用。
+  - XX:+UseZGC 启用 ZGC 垃圾收集器 适用于超大内存应用，极低延迟需求（JDK 11+）。
+  - XX:MaxGCPauseMillis 最大停顿时间目标 JVM 希望（但不保证） 每次垃圾回收导致的应用线程停顿时间 不超过这个目标值。
+  - XX:GCTimeRatio GC 吞吐量目标 如：-XX:GCTimeRatio=9 表示 10% 时间用于 GC，90% 用于应用。
+  - XX:+HeapDumpOnOutOfMemoryError OOM 时生成堆快照也就是堆转储文件，便于分析内存泄漏。
+  - -Xlog:gc\* GC 日志记录（JDK 9+） 如：-Xlog:gc\*:file=gc.log:time,uptime,level,tags
+
+
+
+- 一个实时聊天系统，一个文件上传系统，这两个系统JVM参数怎么设置
+  - 实时聊天系统（低延迟、高并发）
+    - 要求 GC 延迟极低
+    - 一般是 CPU/线程调度密集型
+      - 基础内存：固定内存，避免动态扩容导致停顿。
+      - GC算法：	G1 适合低延迟，ZGC 适合极低延迟（JDK 11+）
+      - 暂停时间目标：G1 的目标暂停时间（可根据业务调到 50ms）
+      - 线程栈大小-Xss256k：	聊天系统线程多（例如 Netty），减小栈空间节约内存
+      - 直接内存-XX:MaxDirectMemorySize=512m：Netty 使用直接内存；需根据连接数和 buffer 估算
+      - GC日志
+  - 文件上传系统（I/O 密集、吞吐优先）
+    - 要求 高吞吐、较大堆空间
+    - 通常有异步线程池、缓存、临时文件缓冲
+      - 基础内存-Xms2g -Xmx4g：文件缓存较多，适度放大堆
+      - GC 算法：Parallel 吞吐优先；G1 更平衡
+      - GC 吞吐目标-XX:GCTimeRatio=9：表示 10% 时间用于 GC（吞吐优先）
+      - 直接内存-XX:MaxDirectMemorySize=1g：文件传输常用 NIO DirectBuffer
+      - 文件缓存优化：-Dio.netty.maxDirectMemory=1g：若使用 Netty 传文件
+      - 线程池优化：降低过多上传线程，防止上下文切换浪费 CPU
+      - GC日志
+  
 - io密集型和cpu密集型有什么区别
   - I/O 密集型
     - 主要瓶颈在 输入/输出（I/O）操作 上，比如 磁盘读写、网络请求、数据库访问。
@@ -2293,4 +3141,7 @@
 
 
 - 假如我现在要从磁盘上去读一个文件，读完之后对它进行修改，然后再写回去。这个过程操作系统的内核它会做什么事情？
-  - 
+
+
+- 从 Redis 视角，接收“get key”请求时，网络及操作系统层面的处理过程是怎样的？
+

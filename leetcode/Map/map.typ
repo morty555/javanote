@@ -255,3 +255,183 @@
   - 注意，除数和取模都是对line
   - 对橘子四个方向遍历记得用新的局部变量，不能在原变量上修改，会污染原pos
   - 更新深度时是更新为父节点深度+1
+
+- 课程表
+  #image("Screenshot_20251031_104250.png")
+  - 邻接表+深度优先搜索检测环
+    ```java
+    class Solution {
+    List<List<Integer>> edges;
+    int[] visited;
+    boolean valid = true;
+
+    public boolean canFinish(int numCourses, int[][] prerequisites) {
+        edges = new ArrayList<List<Integer>>();
+        for (int i = 0; i < numCourses; ++i) {
+            edges.add(new ArrayList<Integer>());
+        }
+        visited = new int[numCourses];
+        for (int[] info : prerequisites) {
+            edges.get(info[1]).add(info[0]);
+        }
+        for (int i = 0; i < numCourses && valid; ++i) {
+            if (visited[i] == 0) {
+                dfs(i);
+            }
+        }
+        return valid;
+    }
+
+    public void dfs(int u) {
+        visited[u] = 1;
+        for (int v: edges.get(u)) {
+            if (visited[v] == 0) {
+                dfs(v);
+                if (!valid) {
+                    return;
+                }
+            } else if (visited[v] == 1) {
+                valid = false;
+                return;
+            }
+        }
+        visited[u] = 2;
+    }
+}
+
+    ```
+    - 全局初始化邻接表edges和访问数组visited，valid表示是否能完成课程
+    - 使用Arraylist来存储是因为课程数目不定，使用list更灵活并且Arraylist支持索引查询，动态扩展
+    - 遍历prerequisites，将先修课程和后续课程的关系存储在邻接表中，info[1]是先修课程，info[0]是后续课程
+    - 然后遍历所有课程，若该课程未被访问过，则从该课程开始深度优先搜索
+    - 在深度优先搜索中，先将当前课程标记为访问中（1），然后遍历该课程的所有后续课程
+      - 若后续课程未被访问过，则递归深度优先搜索该后续课程
+      - 若后续课程正在访问中（1），说明存在环，无法完成课程，标记valid为false并返回
+    - 当所有后续课程都访问完后，将当前课程标记为访问完成（2）
+    - 最后返回valid
+    - Arraylist的访问是通过get(index)方法实现的
+
+  - 广度优先搜索+入度表
+  ```java 
+  class Solution {
+    List<List<Integer>> edges;
+    int[] indeg;
+
+    public boolean canFinish(int numCourses, int[][] prerequisites) {
+        edges = new ArrayList<List<Integer>>();
+        for (int i = 0; i < numCourses; ++i) {
+            edges.add(new ArrayList<Integer>());
+        }
+        indeg = new int[numCourses];
+        for (int[] info : prerequisites) {
+            edges.get(info[1]).add(info[0]);
+            ++indeg[info[0]];
+        }
+
+        Queue<Integer> queue = new LinkedList<Integer>();
+        for (int i = 0; i < numCourses; ++i) {
+            if (indeg[i] == 0) {
+                queue.offer(i);
+            }
+        }
+
+        int visited = 0;
+        while (!queue.isEmpty()) {
+            ++visited;
+            int u = queue.poll();
+            for (int v: edges.get(u)) {
+                --indeg[v];
+                if (indeg[v] == 0) {
+                    queue.offer(v);
+                }
+            }
+        }
+
+        return visited == numCourses;
+    }
+}
+
+  ```
+  - 全局初始化邻接表edges和入度表indeg
+  - 遍历prerequisites，将先修课程和后续课程的关系存储在邻接表中，并更新后续课程的入度
+  - 然后初始化队列，将所有入度为0的课程入队
+  - 然后开始广度优先搜索
+    - 每次从队列中取出一个课程，访问次数加1
+    - 然后遍历该课程的所有后续课程，将后续课程的入度减1
+    - 若后续课程的入度变为0，则将其入队         
+  - 最后判断访问次数是否等于课程总数，若相等则说明可以完成所有课程，返回true，否则返回false
+  - 若入度表中找不到入度为0的课程，说明存在环，无法完成课程，返回false
+
+
+
+
+- 前缀树
+  #image("Screenshot_20251101_125955.png")
+  ```java
+    class Trie {
+        private Trie[] children;
+        private boolean isEnd;
+
+        public Trie() {
+            children = new Trie[26];
+            isEnd = false;
+        }
+        
+        public void insert(String word) {
+            Trie node = this;
+            for (int i = 0; i < word.length(); i++) {
+                char ch = word.charAt(i);
+                int index = ch - 'a';
+                if (node.children[index] == null) {
+                    node.children[index] = new Trie();
+                }
+                node = node.children[index];
+            }
+            node.isEnd = true;
+        }
+        
+        public boolean search(String word) {
+            Trie node = searchPrefix(word);
+            return node != null && node.isEnd;
+        }
+        
+        public boolean startsWith(String prefix) {
+            return searchPrefix(prefix) != null;
+        }
+
+        private Trie searchPrefix(String prefix) {
+            Trie node = this;
+            for (int i = 0; i < prefix.length(); i++) {
+                char ch = prefix.charAt(i);
+                int index = ch - 'a';
+                if (node.children[index] == null) {
+                    return null;
+                }
+                node = node.children[index];
+            }
+            return node;
+        }
+    }
+
+
+    ```
+    - 前缀树的结构如下
+    #image("Screenshot_20251101_130036.png")
+    - 每个节点包含一个长度为26的子节点数组children，表示26个字母的子节点，以及一个布尔值isEnd，表示是否是一个单词的结尾
+    - insert方法用于插入一个单词
+      - 从根节点开始，遍历单词的每个字符
+      - 计算字符对应的索引，若子节点数组中该索引位置为空，则创建一个新的Trie节点，若不为空则直接索引移动到子节点
+      - 然后将当前节点移动到子节点
+      - 遍历完单词后，将最后一个节点的isEnd标记为true
+    - search方法用于搜索一个单词
+      - 调用searchPrefix方法查找单词的最后一个节点
+      - 若节点不为空且isEnd为true，则说明单词存在，返回true，否则返回false
+    - startsWith方法用于检查是否存在以给定前缀开头的单词
+      - 调用searchPrefix方法查找前缀的最后一个节点
+      - 若节点不为空，则说明存在以该前缀开头的单词，返回true，否则返回false
+    - searchPrefix方法用于查找给定前缀的最后一个节点
+      - 从根节点开始，遍历前缀的每个字符
+      - 计算字符对应的索引，若子节点数组中该索引位置为空，则返回null
+      - 然后将当前节点移动到子节点
+      - 遍历完前缀后，返回最后一个节点
+    - Trie node = this 就是从根节点开始遍历，根节点为this，没有数据
