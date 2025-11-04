@@ -238,3 +238,14 @@
       - 降低线程数 或关闭非核心任务
       - 临时禁用缓存或改为 LRU 缩容策略
       - 分批处理任务，避免一次加载太多数据
+
+- 内存溢出了 有什么手段可以立马生成堆转储快照么
+  - 在启动 Java 程序时，可以通过参数让 JVM 在 OOM 时自动生成堆转储：
+    - -XX:+HeapDumpOnOutOfMemoryError：当出现 OutOfMemoryError 时自动生成堆转储文件
+    - -XX:HeapDumpPath：指定生成的文件路径
+  - 如果程序正在运行，可以手动生成：
+    - jmap -dump:live,format=b,file=/path/to/heapdump.hprof <pid>
+  - 现代 JDK 推荐 jcmd：jcmd <pid> GC.heap_dump /path/to/heapdump.hprof
+  - 在代码中动态生成
+    - 在代码里捕获 OutOfMemoryError 或任意时机生成：
+

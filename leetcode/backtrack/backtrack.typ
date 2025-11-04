@@ -306,3 +306,125 @@ public class Permutations1 {
   - 对每个数扩展四个方向，注意边界，如果方向上的数没有被visit过就递归
   - 如果能够遍历k次且没有false说明存在
   - 每次回溯清除visited数组状态
+
+
+
+- 分割回文串
+  #image("Screenshot_20251103_193707.png")
+  ```java
+  class Solution {
+    boolean[][] f;
+    List<List<String>> ret = new ArrayList<List<String>>();
+    List<String> ans = new ArrayList<String>();
+    int n;
+
+    public List<List<String>> partition(String s) {
+        n = s.length();
+        f = new boolean[n][n];
+        for (int i = 0; i < n; ++i) {
+            Arrays.fill(f[i], true);
+        }
+
+        for (int i = n - 1; i >= 0; --i) {
+            for (int j = i + 1; j < n; ++j) {
+                f[i][j] = (s.charAt(i) == s.charAt(j)) && f[i + 1][j - 1];
+            }
+        }
+
+        dfs(s, 0);
+        return ret;
+    }
+
+    public void dfs(String s, int i) {
+        if (i == n) {
+            ret.add(new ArrayList<String>(ans));
+            return;
+        }
+        for (int j = i; j < n; ++j) {
+            if (f[i][j]) {
+                ans.add(s.substring(i, j + 1));
+                dfs(s, j + 1);
+                ans.remove(ans.size() - 1);
+            }
+        }
+    }
+}
+
+
+  ```
+  - 生成一个二维数组，用来表示i到j是否为回文串
+  - 先将该二维数组全部元素置为true
+  - 然后从后向前遍历数组区间，若该区间为回文串则不修改，若不为则修改为false  
+    - 判断依据： f[i][j] = (s.charAt(i) == s.charAt(j)) && f[i + 1][j - 1];
+    - 也就是若i到j这个区间为回文串，那么s[i]一定等于s[j]，并且f[i+1][j-1]也肯定是回文串
+  - 然后从头到尾递归s字符串的所有组合
+  - 满足条件的加入答案数组
+
+
+- N皇后问题
+  #image("Screenshot_20251104_112345.png")
+  ```java
+  class Solution {
+    public List<List<String>> solveNQueens(int n) {
+        List<List<String>> solutions = new ArrayList<List<String>>();
+        int[] queens = new int[n];
+        Arrays.fill(queens, -1);
+        Set<Integer> columns = new HashSet<Integer>();
+        Set<Integer> diagonals1 = new HashSet<Integer>();
+        Set<Integer> diagonals2 = new HashSet<Integer>();
+        backtrack(solutions, queens, n, 0, columns, diagonals1, diagonals2);
+        return solutions;
+    }
+
+    public void backtrack(List<List<String>> solutions, int[] queens, int n, int row, Set<Integer> columns, Set<Integer> diagonals1, Set<Integer> diagonals2) {
+        if (row == n) {
+            List<String> board = generateBoard(queens, n);
+            solutions.add(board);
+        } else {
+            for (int i = 0; i < n; i++) {
+                if (columns.contains(i)) {
+                    continue;
+                }
+                int diagonal1 = row - i;
+                if (diagonals1.contains(diagonal1)) {
+                    continue;
+                }
+                int diagonal2 = row + i;
+                if (diagonals2.contains(diagonal2)) {
+                    continue;
+                }
+                queens[row] = i;
+                columns.add(i);
+                diagonals1.add(diagonal1);
+                diagonals2.add(diagonal2);
+                backtrack(solutions, queens, n, row + 1, columns, diagonals1, diagonals2);
+                queens[row] = -1;
+                columns.remove(i);
+                diagonals1.remove(diagonal1);
+                diagonals2.remove(diagonal2);
+            }
+        }
+    }
+
+    public List<String> generateBoard(int[] queens, int n) {
+        List<String> board = new ArrayList<String>();
+        for (int i = 0; i < n; i++) {
+            char[] row = new char[n];
+            Arrays.fill(row, '.');
+            row[queens[i]] = 'Q';
+            board.add(new String(row));
+        }
+        return board;
+    }
+}
+
+
+
+  ```
+  - 用一个queens数组存储每行（索引代表）的数组索引对应值位置为Q
+  - 用三个set判断是否重复
+  - 每行for循环遍历每个元素和对应列元素，主对角线，副对角线元素是否重复，重复则continue
+  - 若当前行找到都不重复的元素位置，记录在三个set和queens中，遍历下一行
+  - 若能到达第n行，说明所有行都能放置queen,就从queens数组生成一个答案
+  - 回溯去除set数组和queens数组
+  - 生成答案先用char[]，因为可以按索引插入，最后再转为List

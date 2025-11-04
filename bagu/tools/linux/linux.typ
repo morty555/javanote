@@ -70,3 +70,20 @@
     sudo iptables -L -n -v
 
     ```
+
+
+- 嵌套创建文件目录的命令是什么
+  - mkdir -p 路径/到/目录
+  - mkdir -p /home/user/project/src/main/java
+  - 这条命令会依次创建：/home
+                    /home/user
+                    /home/user/project
+                    /home/user/project/src
+                    /home/user/project/src/main
+                    /home/user/project/src/main/java
+
+- cd ./和cd ../
+  - cd . 和 cd ./ → 都是切换到当前目录,不会改变目录
+  - cd .. 和 cd ../ → 都是切换到父目录
+  - 末尾 / 多数情况是可选的，加上只是明确表示这是目录。
+
