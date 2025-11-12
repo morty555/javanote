@@ -131,6 +131,11 @@
       - 为了解决，对每个消息进行分类，一类消息是一个topic，生产者根据数据类别将数据投递到不同的topic中，消费者根据需要订阅不同的topic
       - 但是单个topic的消息还是过多，我们可以将单个topic的消息拆成好几段，每一段就是一个partition分区，每个消费者订阅一个partition，这样就大大减少了争抢
       - 每个partition的数据会被拆分成多个segement文件，每个segement文件存储消息，并且segement文件是顺序写入的
+        - 为什么需要segement
+          - 便于删除旧数据（日志截断）Kafka 只需要 按 segment 为单位删除整个文件。这样就不用改写文件内容，只要删除文件即可，非常高效。
+          - 限制单个文件大小，方便管理
+          - 提高检索效率（通过索引定位 segment）Broker 可以先根据 offset 查出目标 segment，再在该 segment 的 index 文件中定位消息位置。这样查找速度是 O(log n)，而不是在整个 partition 文件里线性扫描。
+          - Kafka 是顺序写磁盘的系统，写入主要在 当前 active segment（当前最后一个段）中。读操作可以在多个只读文件中安全并发进行。写入操作只影响一个文件；
     - 高扩展性 
       - 随着partition变多，如果多个partition都在同一个机器上，cpu和内存过高影响性能
       - 因此可以使用多个机器，将partition分散部署到多个机器上，每个机器就叫做一个broker
