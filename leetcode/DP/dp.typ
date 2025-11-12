@@ -209,3 +209,110 @@
     - 将每个索引处最大递增子序列长度保留，也就是dp数组
     - 遍历nums,每次有nums[i]大于nums[j]时就判断dp[i]的值是否需要更新
     - 对每个i位置遍历完j后更新答案maxans
+
+- 乘积最大子数组
+  #image("Screenshot_20251112_193527.png")
+  ```java
+  class Solution {
+    public int maxProduct(int[] nums) {
+        int n = nums.length;
+        int max = nums[0];
+        int min = nums[0];
+        int ans = nums[0];
+        for(int i=1;i<n;i++){
+            int mx = max;
+            int mn = min;
+            max = Math.max(mn*nums[i],Math.max(nums[i],mx*nums[i]));
+            min = Math.min(mx*nums[i],Math.min(nums[i],mn*nums[i]));
+            ans = Math.max(max,ans);
+        }
+        return ans;
+    }
+}
+  ```
+    - 同时维护最大值和最小值，每次比较最大值\*当前位置和最小值\*当前位置与当前位置三个数大小，更新最大最小值
+
+
+- 分割等和子集
+  #image("Screenshot_20251112_201459.png")
+  - 二维数组dp解法 
+  ```java
+  class Solution {
+    public boolean canPartition(int[] nums) {
+        int n = nums.length;
+        if (n < 2) {
+            return false;
+        }
+        int sum = 0, maxNum = 0;
+        for (int num : nums) {
+            sum += num;
+            maxNum = Math.max(maxNum, num);
+        }
+        if (sum % 2 != 0) {
+            return false;
+        }
+        int target = sum / 2;
+        if (maxNum > target) {
+            return false;
+        }
+        boolean[][] dp = new boolean[n][target + 1];
+        for (int i = 0; i < n; i++) {
+            dp[i][0] = true;
+        }
+        dp[0][nums[0]] = true;
+        for (int i = 1; i < n; i++) {
+            int num = nums[i];
+            for (int j = 1; j <= target; j++) {
+                if (j >= num) {
+                    dp[i][j] = dp[i - 1][j] | dp[i - 1][j - num];
+                } else {
+                    dp[i][j] = dp[i - 1][j];
+                }
+            }
+        }
+        return dp[n - 1][target];
+    }
+}
+
+  ```
+    - 用一个行为n列为target的二维数组来动态规划
+    - 行索引代表前n个元素选取，列索引代表目标值，若dp[i][j]为true,说明前i个元素集合中可以找到元素之和为j的一组元素
+    - 每次更新当前dp[i][j]时需要判断nums[i]和j的大小比值来看是否选取当前元素
+  - 一维数组优化
+    ```java
+    class Solution {
+    public boolean canPartition(int[] nums) {
+        int n = nums.length;
+        if (n < 2) {
+            return false;
+        }
+        int sum = 0, maxNum = 0;
+        for (int num : nums) {
+            sum += num;
+            maxNum = Math.max(maxNum, num);
+        }
+        if (sum % 2 != 0) {
+            return false;
+        }
+        int target = sum / 2;
+        if (maxNum > target) {
+            return false;
+        }
+        boolean[] dp = new boolean[target + 1];
+        dp[0] = true;
+        for (int i = 0; i < n; i++) {
+            int num = nums[i];
+            for (int j = target; j >= num; --j) {
+                dp[j] |= dp[j - num];
+            }
+        }
+        return dp[target];
+    }
+}
+
+    ``` 
+      - 因为二维数组每次只由上一行元素来更新
+      - 因此可以只用一行数组来更新
+      - 但是要从后往前，因为前面的元素要保留上一行的状态，如果从前往后状态就先被更新了
+      - 为什么这里不赋值dp[num[0]]=true
+        - 其实是可以赋值的，当时赋值后说明第一行已经处理完了，那么for循环的i要从1开始遍历

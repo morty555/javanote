@@ -273,3 +273,53 @@
       - 先查 id 再回表
   - 查看慢查询日志
   - 看是否存在回表
+
+
+- 如果线上频繁full gc，如何排查？
+  - 线上频繁 Full GC 是 Java 应用性能问题的一个常见症状，通常意味着 老年代内存不足 或 内存碎片严重。
+  - 确认 Full GC 频率
+    - 查看 GC 日志或通过监控工具（如 Prometheus + Grafana、SkyWalking、Arthas、JConsole、VisualVM）观察
+    - 关注应用指标
+      - Heap 使用率：老年代接近 100% 或持续上升
+      - Metaspace / PermGen：是否有类加载泄漏
+      - GC 停顿时间：Full GC 可能导致 TPS/响应异常
+  - 收集关键数据
+    - GC 日志
+      - 线上开启 GC 日志
+      - 分析工具
+        - GCViewer
+        - GCEasy  
+    - Heap Dump
+      - 线上堆快照
+      - 使用 Eclipse MAT 分析
+    - 线程 & 类加载情况
+      - 使用 jstack 查看线程堆栈是否有阻塞
+      - 查看是否频繁动态生成类（导致 Metaspace 满）
+  - 分析 Full GC 触发原因
+    - Promotion Failure（年轻代对象晋升失败）Minor GC 后老年代不足
+      - 解决：调整堆大小 / 老年代比例 / GC 策略
+    - System.gc() 显式调用，GC 日志显示 System.gc()
+      - 排查代码，禁用 -XX:+DisableExplicitGC
+    - 老年代空间不足
+      - 增加老年代、优化对象生命周期
+    - 内存泄漏，老年代对象持续增长
+      - 找到泄漏对象，优化缓存、集合、静态引用
+    - 类加载过多
+      - 增加 Metaspace 或排查动态生成类
+  - 调优思路
+    - 调优 JVM 参数
+      - 调整堆和 GC 策略
+      - G1GC 对频繁 Full GC 的大对象场景较友好。
+    - 代码优化
+      - 减少老年代对象分配：
+        - 短生命周期对象尽量在年轻代分配
+        - 减少大对象数组/集合频繁创建
+      - 优化缓存：
+        - 限制大小，使用弱引用 / LRU
+      - 避免 System.gc() 显式调用
+    - 排查内存泄漏
+      - 长生命周期对象不断累积 → 堆快照分析
+      - 常见泄漏点：
+        - 静态集合
+        - ThreadLocal
+        - 缓存 / Listener / 订阅者未释放

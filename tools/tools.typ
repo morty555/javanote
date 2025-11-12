@@ -262,7 +262,7 @@ public SecurityFilterChain filterChain(HttpSecurity http, RedisAuthenticationFil
       - 整个过程中，内存里同时只会存在“一行数据 + 一点解析状态”。
       - 内存使用量 ≈ 行数据对象大小 × 1~2倍
 
-
+- Disruptor
 
 
 
