@@ -12,3 +12,28 @@
   - 临时提交到本地但不推送
   - 如果想保留但在多个分支都可用 git switch other-branch --merge
     - 提是：改动的文件与目标分支没有冲突，否则 Git 会拒绝切换。
+
+- 如何重命名一个已经在本地提交过的commit
+  - 修改最近一次的 commit 信息
+    ```
+    git commit --amend -m "新的提交信息"
+    ```
+  - 修改某个较早的 commit 信息（非最近一次）
+    ```
+    git rebase -i HEAD~n
+
+    ```
+    - n 是从当前 HEAD 往上数的提交数量。
+    - Git 会打开一个编辑界面，显示最近 n 个 commit。
+    - 找到你想修改的 commit，将 pick 改为 reword
+    - 保存并退出编辑器。
+    - Git 会依次停在你标记为 reword 的 commit，让你修改提交信息。
+    - 修改完成后保存即可。
+    - 如果该 commit 已经推送到远程仓库，修改 commit 会改变 hash，需要强制推送
+
+  - 如果 rebase 的时候冲突了，怎么办？
+    - git status查看冲突
+    - 手动解决冲突
+    - git add <file1> <file2> ...标记冲突已解决
+    - git rebase --continue继续 rebase  
+    - git rebase --abort放弃 rebase（可选）

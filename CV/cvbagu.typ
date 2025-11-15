@@ -158,6 +158,46 @@
     - 它会定期和broker通信，获取kafka集群的状态，以此来判断某个broker是不是挂了，某些消费组消费到哪了  
     - 后面zookeeper被删除换成了raft一致性算法
 
+-  kafka中的消费者组怎么设置的
+  - Kafka 连接配置
+    - Spring Boot 要知道 Kafka 地址、序列化方式、消费者组的默认配置。通常在 application.yml 或 application.properties 中写
+  - 开启 KafkaListener 扫描
+    - 确保你的 Spring Boot 主类或者配置类上有\@EnableKafka
+  - Topic 必须存在
+    - 开启 Spring Boot 自动创建
+    - 生产环境建议 Kafka 里先手动创建 topic，并设置分区数、复制因子等
+  - 每个 Listener 自己指定 groupId
+  ```java
+
+  @Component
+public class KafkaConsumers {
+
+    @KafkaListener(topics = "order", groupId = "order-group")
+    public void orderConsumer(String msg) {
+        System.out.println("order-group 收到消息: " + msg);
+    }
+
+    @KafkaListener(topics = "order", groupId = "log-group")
+    public void logConsumer(String msg) {
+        System.out.println("log-group 收到消息: " + msg);
+    }
+
+    @KafkaListener(topics = "order", groupId = "monitor-group")
+    public void monitorConsumer(String msg) {
+        System.out.println("monitor-group 收到消息: " + msg);
+    }
+}
+
+  ```
+  - 一个 Listener 多实例
+  ```java
+  @KafkaListener(topics = "order", groupId = "order-group", concurrency = "3")
+public void orderConsumer(String msg) {
+    // order-group 下有 3 个消费者实例，并发消费
+}
+
+  ```
+  - 如果你想让不同 group 用不同配置（比如不同反序列化、不同隔离级别），可以写多个 factory。
 
 - RocketMQ
   - 是对kafka的继承和改进
@@ -380,6 +420,11 @@
       - 你的消费者是调用 Python 服务分析图片，每张图片处理时间可能较长。
       - 如果消费者数量不足，消息堆积，导致延迟增加。
 
+  - 你的消息队列的事务如何实现的？
+    - 用“本地消息表 + ConfirmCallback”模式来实现事务消息
+    - RabbitMQ 没有像 RocketMQ 那样的原生事务消息机制，它早期的 txSelect 模式性能太低，也无法与数据库事务原子提交。
+
+    
   - 如果有成千上万张图片同时上传，消费者压力如何？
     - 单消费者：
       - 消费速度跟不上消息产生速度 → 队列消息堆积
@@ -781,6 +826,14 @@
 - \@Scheduled仅单机，依赖当前服务。 XXL-JOB分布式执行
 
 
+- 如何设计一个线程池
+  - 任务队列
+    - 存放等待执行的任务
+  - 工作线程
+  - 线程池管理器 
+  - 任务接口 
+  - 拒绝策略
+
 - 线程池的原理
   - 线程池的原理可以总结为一句话：通过复用固定数量的工作线程来执行大量的异步任务，从而减少线程频繁创建与销毁的开销，并提升系统的吞吐量与稳定性。
   - 线程池主要包含以下几个核心组件：
@@ -873,6 +926,16 @@
   - LinkedBlockingQueue可以设置容量，如果容量超过了，使用add方法会抛异常，防止内存溢出，put() / take() 会在队列满或空时自动阻塞；
   - LinkedBlockingQueue 内部维护两把独立锁，putLock 控制生产，takeLock 控制消费，这样生产和消费几乎可以同时进行，减少锁竞争。
   
+
+- 多个线程同时消费一个未消费的订单这个情况如何解决
+  - 数据库加锁
+    - 乐观锁
+    - 悲观锁
+  - REDIS分布式锁，利用订单SETNX
+  - 幂等性保障
+  - 将订单ID通过哈希函数映射到固定线程编号，使得同一个订单始终由同一个线程消费，从而天然避免并发问题。
+
+
 
 
 
@@ -1226,3 +1289,46 @@
     - AOF
     - RDB
     - AOF+RDB
+
+
+- MCP是什么？
+  - 这是 OpenAI 在 2024 年末推出的一种协议，用于让 AI 模型和外部系统通信。
+  - MCP 让模型可以安全地访问
+    - 数据库
+    - 文件系统
+    - 外部API
+    - 工具 / 第三方服务
+  - 而不需要让模型直接访问互联网，也无需写特定 SDK。  
+    - sdk：一套 帮助开发者更容易使用某个系统、平台或服务的工具集合
+
+- 现在已经有 HTTP 协议了，为什么还要调用 MCP 呢？
+  - HTTP 是“传输方式”，MCP 是“模型与外部系统交互的语义协议”。它解决的是 AI 调用工具/服务时缺失的结构化能力、安全能力与标准化问题，而不是取代 HTTP。
+  - HTTP 只是“数据怎么传”，但模型不知道“数据是什么“
+    - HTTP 本身只是：
+      - GET/POST
+      - header/body
+      - 字节传输
+    - 但模型并不懂：
+      - 哪些 API 能调用？
+      - 每个工具需要哪些参数？
+      - 参数格式是什么？
+      - 返回结果是什么？  
+  - MCP 解决的是：模型和工具之间的“结构化沟通语言”
+    - 一个让模型理解外部系统能力、输入、输出、安全规则的协议。
+  - MCP 的价值核心：模型可以自己可靠地调用工具
+  - MCP 不替代 HTTP，而是建立在 HTTP / WebSocket 之上
+    - MCP 的传输层依然依赖：
+      - HTTP
+      - WebSocket
+
+- langchain4j使用的是什么协议
+  -  HTTP + JSON（REST API+SSE（流式响应）
+
+- LangChain4j 本身不能改变 Embedding 向量维度，维度由模型决定。你只能通过“换模型”来改变维度。但是可以改变温度，温度是每个 ChatModel 的可配置参数。
+
+- 什么是召回率
+  - 召回率（Recall）是机器学习和信息检索领域常用的指标，用来衡量模型找回了多少真正的目标对象。它关注的是 “漏掉了多少”，也就是衡量覆盖能力。
+  - #image("Screenshot_20251115_103321.png")
+  - 实际正样本中有多少被模型找到了
+- 精确率（Precision）
+  - 模型预测为正的样本中有多少是真的正
