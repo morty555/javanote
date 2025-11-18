@@ -375,3 +375,181 @@
 } 
     ```
       - 从左上角到右下角的过程中，我们需要移动 m+n−2 次，其中有 m−1 次向下移动，n−1 次向右移动。因此路径的总数，就等于从 m+n−2 次移动中选择 m−1 次向下移动的方案数
+
+
+- 最小路径和
+  ```java
+  class Solution {
+    public int minPathSum(int[][] grid) {
+        if (grid == null || grid.length == 0 || grid[0].length == 0) {
+            return 0;
+        }
+        int rows = grid.length, columns = grid[0].length;
+        int[][] dp = new int[rows][columns];
+        dp[0][0] = grid[0][0];
+        for (int i = 1; i < rows; i++) {
+            dp[i][0] = dp[i - 1][0] + grid[i][0];
+        }
+        for (int j = 1; j < columns; j++) {
+            dp[0][j] = dp[0][j - 1] + grid[0][j];
+        }
+        for (int i = 1; i < rows; i++) {
+            for (int j = 1; j < columns; j++) {
+                dp[i][j] = Math.min(dp[i - 1][j], dp[i][j - 1]) + grid[i][j];
+            }
+        }
+        return dp[rows - 1][columns - 1];
+    }
+}
+
+  ```
+
+
+- 最长回文子串
+  #image("Screenshot_20251116_003727.png")
+  - dp
+  ```java
+  class Solution {
+    public String longestPalindrome(String s) {
+        int n = s.length();
+        if(n<2){
+            return s;
+        }
+        int begin = 0;
+        int last = 0;
+        boolean[][] dp = new boolean[n][n];
+        for(int i=0;i<n;i++){
+            dp[i][i]=true;
+        } 
+        char[] array = s.toCharArray();
+        int max=1;
+        for(int i=1;i<n;i++){
+            for(int j=0;j<i;j++){
+                if(array[i]==array[j]){
+                    int len = i-j+1;
+                    if(len<=3){
+                        dp[j][i]=true;
+                    }
+                    else{
+                        if(dp[j+1][i-1]==true){
+                            dp[j][i]=true;
+                        }
+                    }
+                    if(dp[j][i]&&len>max){
+                        max = len;
+                        begin = j;
+                        last = i;
+                    }
+
+                }
+                else{
+                    dp[j][i]=false;
+                }
+              
+            }
+        }
+        return s.substring(begin,last+1);
+    }
+}
+  ```
+    - 通过从0-1开始遍历到0-n来判断每一对子串是否为回文子串
+
+  - 中心扩展算法
+  ```java
+  class Solution {
+    public String longestPalindrome(String s) {
+        if (s == null || s.length() < 1) {
+            return "";
+        }
+        int start = 0, end = 0;
+        for (int i = 0; i < s.length(); i++) {
+            int len1 = expandAroundCenter(s, i, i);
+            int len2 = expandAroundCenter(s, i, i + 1);
+            int len = Math.max(len1, len2);
+            if (len > end - start) {
+                start = i - (len - 1) / 2;
+                end = i + len / 2;
+            }
+        }
+        return s.substring(start, end + 1);
+    }
+
+    public int expandAroundCenter(String s, int left, int right) {
+        while (left >= 0 && right < s.length() && s.charAt(left) == s.charAt(right)) {
+            --left;
+            ++right;
+        }
+        return right - left - 1;
+    }
+}
+
+  ```
+
+- 最长公共子序列
+  #image("Screenshot_20251117_095351.png")
+  ```java 
+  class Solution {
+    public int longestCommonSubsequence(String text1, String text2) {
+        int m = text1.length(), n = text2.length();
+        int[][] dp = new int[m + 1][n + 1];
+        for (int i = 1; i <= m; i++) {
+            char c1 = text1.charAt(i - 1);
+            for (int j = 1; j <= n; j++) {
+                char c2 = text2.charAt(j - 1);
+                if (c1 == c2) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
+        return dp[m][n];
+    }
+}
+
+  ```
+
+    - dp的索引代表的是取前n个字符，如dp[i][j]的意思就是取text1前i个和text2前j个看有多少个顺序相同的字符
+
+- 编辑距离
+  #image("Screenshot_20251117_103401.png")
+  ```java
+  class Solution {
+    public int minDistance(String word1, String word2) {
+        int n = word1.length();
+        int m = word2.length();
+
+        // 有一个字符串为空串
+        if (n * m == 0) {
+            return n + m;
+        }
+
+        // DP 数组
+        int[][] D = new int[n + 1][m + 1];
+
+        // 边界状态初始化
+        for (int i = 0; i < n + 1; i++) {
+            D[i][0] = i;
+        }
+        for (int j = 0; j < m + 1; j++) {
+            D[0][j] = j;
+        }
+
+        // 计算所有 DP 值
+        for (int i = 1; i < n + 1; i++) {
+            for (int j = 1; j < m + 1; j++) {
+                int left = D[i - 1][j] + 1;
+                int down = D[i][j - 1] + 1;
+                int left_down = D[i - 1][j - 1];
+                if (word1.charAt(i - 1) != word2.charAt(j - 1)) {
+                    left_down += 1;
+                }
+                D[i][j] = Math.min(left, Math.min(down, left_down));
+            }
+        }
+        return D[n][m];
+    }
+}
+  ```
+    - 索引依然是取string的字符个数
+    - 对dp[i][j]的取值可以看作是由dp[i-1][j]+1和dp[i][j-1]+1,然后通过判断两个word在i,j处是否相等来决定是dp[i-1][j-1]+1还是dp[i-1][j-1]

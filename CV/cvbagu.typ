@@ -68,6 +68,24 @@
       - 灵活绑定关系，方便解耦生产者和消费者；
       - 动态路由和多租户隔离。 
 
+    - RabbitMQ 的数据持久化是怎么做的？
+      - 交换机持久化（Exchange）、队列持久化（Queue） 和 消息持久化（Message）。
+      - 交换机和队列的持久化
+        - 参数声明即可
+      - 消息持久化
+        - 基于 delivery_mode 的消息持久化
+        - deliveryMode(2) 表示
+          - 将消息写入磁盘
+          - 防止 RabbitMQ 宕机 / 重启后消息丢失
+        - RabbitMQ 会 先写入缓存再异步落盘
+      - RabbitMQ 保证落盘机制
+        - 为避免消息在刷盘前丢失，RabbitMQ 提供了Publisher Confirm 模式 
+        - RabbitMQ 返回 ack → 消息已持久化到磁盘
+        - 返回 nack → 你可以重试
+      - 镜像队列 / Quorum 队列 
+        - 如果你要 节点挂了也不丢，只能靠 RabbitMQ 集群机制
+
+
 
   - 消息队列如何选型
     #image("Screenshot_20251009_221833.png")

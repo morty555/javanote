@@ -1,4 +1,4 @@
-= linux命令面试题
++ linux命令面试题
 - Linux的常用命令了解过哪些？
   - 文件相关(mv mkdir cd ls)
   - 进程相关( ps top netstat )

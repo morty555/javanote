@@ -453,3 +453,70 @@ public class Permutations2 {
   - \$结尾
   - \b单词边界
   - ()分组
+
+
+- 手撕一个计算器，输入一个字符串，输出答案，字符串只包含括号和+、-
+  ```java  
+    public class BasicCalculator {
+      public int calculate(String s) {
+          int res = 0;      // 当前计算结果
+          int num = 0;      // 当前数字
+          int sign = 1;     // 当前数字前的符号：1 or -1
+
+          java.util.Stack<Integer> stack = new java.util.Stack<>();
+
+          for (int i = 0; i < s.length(); i++) {
+              char ch = s.charAt(i);
+
+              if (Character.isDigit(ch)) {
+                  // 处理多位数
+                  num = num * 10 + (ch - '0');
+              } else if (ch == '+') {
+                  // 遇到 +，先把之前的 num 加进去
+                  res += sign * num;
+                  sign = 1;
+                  num = 0;
+              } else if (ch == '-') {
+                  res += sign * num;
+                  sign = -1;
+                  num = 0;
+              } else if (ch == '(') {
+                  // 把当前结果和符号存栈
+                  stack.push(res);
+                  stack.push(sign);
+                  // 重置
+                  res = 0;
+                  sign = 1;
+                  num = 0;
+              } else if (ch == ')') {
+                  // 先结算括号内的数
+                  res += sign * num;
+                  num = 0;
+
+                  // 弹出符号，再弹结果
+                  int prevSign = stack.pop();
+                  int prevRes = stack.pop();
+                  res = prevRes + prevSign * res;
+              }
+              // 空格跳过
+          }
+
+          // 最后的数字累加
+          res += sign * num;
+          return res;
+      }
+
+      public static void main(String[] args) {
+          BasicCalculator calc = new BasicCalculator();
+          System.out.println(calc.calculate("1 + 1"));                      // 2
+          System.out.println(calc.calculate(" 2-1 + 2 "));                  // 3
+          System.out.println(calc.calculate("(1+(4+5+2)-3)+(6+8)"));        // 23
+          System.out.println(calc.calculate("-(3+(2-1))"));                 // -4
+          System.out.println(calc.calculate(" -2 "));                       // -2
+          System.out.println(calc.calculate("((1))+((2)) - (3 + ( -1))"));  // 1
+      }
+  }
+
+  ```
+    - 当遇到左括号用栈存储括号之前的计算结果
+    - 遇到右括号后得到括号内的计算结果，再将栈内的数弹出，也就是括号之前的结果弹出和括号内的计算结果相加
