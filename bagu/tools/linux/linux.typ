@@ -87,3 +87,21 @@
   - cd .. 和 cd ../ → 都是切换到父目录
   - 末尾 / 多数情况是可选的，加上只是明确表示这是目录。
 
+- linux 查询线程的cpu占有率（列表、最高）
+  - top -H -p <pid>
+  - 使用 ps 查询线程 CPU 占用
+    - ps -eLf --sort=-%cpu | head -n 20
+    - ps -p <tid> -o pid,tid,pcpu,comm
+  -  使用 pidstat
+
+- linux查找文件
+  - find /path/to/search -name "filename"
+  - 使用 locate 命令
+    - locate 非常快，但依赖数据库 /var/lib/mlocate/mlocate.db，需要提前更新：
+  - 使用 which 命令查找可执行文件在 PATH 中的位置
+  - 根据文件内容查找使用 find + grep 查找内容
+
+- 编辑文件
+  - nano
+  - Vim（有大文件模式）
+

@@ -520,3 +520,254 @@ public class Permutations2 {
   ```
     - 当遇到左括号用栈存储括号之前的计算结果
     - 遇到右括号后得到括号内的计算结果，再将栈内的数弹出，也就是括号之前的结果弹出和括号内的计算结果相加
+
+
+- 手写单例模式
+  - 饿汉式（线程安全，类加载时创建）
+  ```java
+    public class SingletonEager {
+      // 类加载时就创建实例
+      private static final SingletonEager INSTANCE = new SingletonEager();
+
+      // 构造函数私有化，防止外部创建
+      private SingletonEager() {}
+
+      public static SingletonEager getInstance() {
+          return INSTANCE;
+      }
+  }
+  
+  ```
+  - 懒汉式（线程不安全）
+  ```java     
+      public class SingletonLazy {
+        private static SingletonLazy instance;
+
+        private SingletonLazy() {}
+
+        public static SingletonLazy getInstance() {
+            if (instance == null) {
+                instance = new SingletonLazy();
+            }
+            return instance;
+        }
+    }
+
+  ```
+  - 如何让懒汉式线程安全
+    - 双重检查锁 DCL
+    ```java
+      public class Singleton {
+      private static volatile Singleton instance;
+
+      private Singleton() {}
+
+      public static Singleton getInstance() {
+          if (instance == null) {           // 第一次检查（无锁）
+              synchronized (Singleton.class) {
+                  if (instance == null) {   // 第二次检查（加锁）
+                      instance = new Singleton();
+                  }
+              }
+          }
+          return instance;
+      }
+  }
+
+    ```
+    - 静态内部类
+    ```java
+          public class Singleton {
+          private Singleton() {}
+
+          private static class Holder {
+              private static final Singleton INSTANCE = new Singleton();
+          }
+
+          public static Singleton getInstance() {
+              return Holder.INSTANCE;
+          }
+      }
+
+    ```
+
+
+
+- 手写迭代删除
+  - 迭代器删除
+    ```java
+    List<Integer> list = new ArrayList<>(Arrays.asList(1,2,3,4,5,6));
+    Iterator<Integer> it = list.iterator();
+    while (it.hasNext()) {
+        Integer x = it.next();
+        if (x % 2 == 0) {
+            it.remove(); // 安全：不会抛 ConcurrentModificationException
+        }
+    }
+
+    ```
+  - 反向索引遍历
+    ```java
+    for (int i = list.size() - 1; i >= 0; --i) {
+        if (list.get(i) % 2 == 0) {
+            list.remove(i); // 反向删除避免后续元素索引改变的问题
+        }
+    }
+  
+    ```
+  - 单向链表 ——按值删除节点
+    
+
+
+- 手写LRU  
+  ```java
+  package org.example.write;
+
+  import java.util.HashMap;
+  import java.util.Map;
+
+  public class LRU {
+
+      class node {
+          int key, val;
+          node next, pre;
+          node(int key, int val) { this.key = key; this.val = val; }
+      }
+
+      private final node head = new node(-1, -1);
+      private final node tail = new node(-1, -1);
+      private final int cap;
+      private final Map<Integer, node> map = new HashMap<>();
+
+      public LRU(int cap) {
+          this.cap = cap;
+          head.next = tail;
+          tail.pre = head;
+      }
+
+      public int get(int key) {
+          if (!map.containsKey(key)) return -1;
+          node n = map.get(key);
+          removeNode(n);
+          addFirst(n);
+          return n.val;
+      }
+
+      public void put(int key, int val) {
+          if (map.containsKey(key)) {
+              node n = map.get(key);
+              n.val = val;
+              removeNode(n);
+              addFirst(n);
+              return;
+          }
+
+          if (map.size() == cap) {
+              node last = tail.pre;
+              removeNode(last);
+              map.remove(last.key);
+          }
+
+          node n = new node(key, val);
+          addFirst(n);
+          map.put(key, n);
+      }
+
+      public void delete(int key) {
+          if (!map.containsKey(key)) return;
+          node n = map.get(key);
+          removeNode(n);
+          map.remove(key);
+      }
+
+      private void removeNode(node n) {
+          n.pre.next = n.next;
+          n.next.pre = n.pre;
+      }
+
+      private void addFirst(node n) {
+          n.next = head.next;
+          n.pre = head;
+          head.next.pre = n;
+          head.next = n;
+      }
+  }
+  
+  ```
+  - LRU类中包括
+    - 一个双向链表的NODE类，包含keyvalue 
+    - 一个Hashmap存储key和node的keyvalue结构
+    - 容量cap
+    - 初始化LRU的时候，初始化容量cap，同时创建head和tail作为双向链表辅助节点，让他们相连
+    - put函数
+      - 判断原来LRU有没有该key的元素，用hashmap判断
+      - 如果有，则直接放入val，同时将该node提到第一，也就是remove再moveFirst
+      - 如果没有，要先判断是否超过cap,如果超过则直接remove最后一个元素，即tail.pre  
+      - 然后再插入新的node到hashmap和moveFirst
+    - delete函数
+      - 要判断key是否存在
+      - 直接调用remove，同时删去hashmap表中该记录
+    - get函数
+      - 判断key是否存在
+      - 若存在则把该key提前，直接返回值
+    - 两个辅助函数
+      - 一个moveFirst
+      - 一个remove
+
+
+- 位运算实现两数之和
+  ```java
+    public int add(int a, int b) {
+      while (b != 0) {
+          int carry = (a & b) << 1; // 计算进位
+          a = a ^ b;                // 不带进位的结果
+          b = carry;                // 把进位加到下一轮
+      }
+      return a;
+  }
+   
+  ```
+
+- 给定一个非负整数 n ，返回 n! 结果的末尾为 0 的数量。n! 是指自然数 n! 的阶乘。特殊的,  0 的阶乘是 1 。 用java实现
+  ```java
+  import java.util.Scanner;
+
+public class TrailingZerosFactorial {
+    /**
+     * 计算 n! 尾部有多少个连续的 0
+     * 支持 n 为非负整数，返回 long（计数可能较大）
+     */
+    public static long trailingZeros(long n) {
+        if (n < 0) throw new IllegalArgumentException("n 必须是非负整数");
+        long count = 0;
+        long divisor = 5;
+        while (divisor <= n) {
+            count += n / divisor;
+            // 防止乘溢出：使用除法判断并提前退出（但 long 范围内多次乘 5 也可）
+            if (divisor > Long.MAX_VALUE / 5) break;
+            divisor *= 5;
+        }
+        return count;
+    }
+
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("请输入非负整数 n: ");
+        if (!sc.hasNextLong()) {
+            System.out.println("输入不是有效的整数");
+            sc.close();
+            return;
+        }
+        long n = sc.nextLong();
+        if (n < 0) {
+            System.out.println("n 必须是非负整数");
+            sc.close();
+            return;
+        }
+        long zeros = trailingZeros(n);
+        System.out.println(n + "! 末尾零的个数为: " + zeros);
+        sc.close();
+    }
+}
+ 
+  ```

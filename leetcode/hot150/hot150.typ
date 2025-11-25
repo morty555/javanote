@@ -198,3 +198,85 @@
     }
 }
   ```
+
+- 股票买卖时机
+  ```java
+  class Solution {
+    public int maxProfit(int[] prices) {
+        int preMin = Integer.MAX_VALUE;
+        int ans = 0;
+        for(int i=0;i<prices.length;i++){
+            if(preMin>prices[i]){
+                preMin = prices[i];
+                continue;
+            }
+            ans += prices[i]-preMin;
+            preMin = prices[i];
+        }
+        return ans;
+    }
+}  
+  ```
+
+- H指数
+  #image("/assets/Screenshot_20251124_233641.png")
+  - 排序 
+  - 计数排序 
+    ```java
+            public class Solution {
+            public int hIndex(int[] citations) {
+                int n = citations.length, tot = 0;
+                int[] counter = new int[n + 1];
+                for (int i = 0; i < n; i++) {
+                    if (citations[i] >= n) {
+                        counter[n]++;
+                    } else {
+                        counter[citations[i]]++;
+                    }
+                }
+                for (int i = n; i >= 0; i--) {
+                    tot += counter[i];
+                    if (tot >= i) {
+                        return i;
+                    }
+                }
+                return 0;
+            }
+        }
+
+
+    ```
+  - 二分 
+    - 空间复杂度O1
+
+
+- 接雨水 
+  - 双指针
+  ```java
+  class Solution {
+    public int trap(int[] height) {
+        int ans = 0;
+        int left = 0, right = height.length - 1;
+        int leftMax = 0, rightMax = 0;
+        while (left < right) {
+            leftMax = Math.max(leftMax, height[left]);
+            rightMax = Math.max(rightMax, height[right]);
+            if (height[left] < height[right]) {
+                ans += leftMax - height[left];
+                ++left;
+            } else {
+                ans += rightMax - height[right];
+                --right;
+            }
+        }
+        return ans;
+    }
+}
+ 
+  ```
+  - 动态规划
+    - 遍历得到每个索引的左最大和右最大，用两个数组存储
+    - 对每个位置求左最大和右最大的最小值-当前索引位置的值
+    - 最后遍历结果数组求和
+
+    
