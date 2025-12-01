@@ -216,26 +216,30 @@
     - 每次只找一个最小节点，然后将两个链表剩下的递归
   - 迭代
     ```java
-    class Solution {
-    public ListNode mergeTwoLists(ListNode l1, ListNode l2) {
-        ListNode prehead = new ListNode(-1);
-
-        ListNode prev = prehead;
-        while (l1 != null && l2 != null) {
-            if (l1.val <= l2.val) {
-                prev.next = l1;
-                l1 = l1.next;
-            } else {
-                prev.next = l2;
-                l2 = l2.next;
-            }
-            prev = prev.next;
+class Solution {
+    public ListNode mergeTwoLists(ListNode list1, ListNode list2) {
+        if(list1==null){
+            return list2;
         }
-
-        // 合并后 l1 和 l2 最多只有一个还未被合并完，我们直接将链表末尾指向未合并完的链表即可
-        prev.next = l1 == null ? l2 : l1;
-
-        return prehead.next;
+        if(list2==null){
+            return list1;
+        }
+        ListNode dummy = new ListNode(-1);
+        ListNode dummynode = dummy;
+        while(list1!=null&&list2!=null){
+            if(list1.val<list2.val){
+                dummynode.next = list1;
+                dummynode = dummynode.next;
+                list1 = list1.next;
+            }
+            else{
+                dummynode.next = list2;
+                dummynode = dummynode.next;
+                list2 = list2.next;
+            }
+        }
+        dummynode.next = list1==null?list2:list1;
+        return dummy.next;
     }
 }
     ```
@@ -245,33 +249,38 @@
 - 两数相加
   #image("Screenshot_20251006_151846.png")
   ```java
-  class Solution {
+
+class Solution {
     public ListNode addTwoNumbers(ListNode l1, ListNode l2) {
-        ListNode head = null, tail = null;
-        int carry = 0;
-        while (l1 != null || l2 != null) {
-            int n1 = l1 != null ? l1.val : 0;
-            int n2 = l2 != null ? l2.val : 0;
-            int sum = n1 + n2 + carry;
-            if (head == null) {
-                head = tail = new ListNode(sum % 10);
-            } else {
-                tail.next = new ListNode(sum % 10);
-                tail = tail.next;
-            }
-            carry = sum / 10;
-            if (l1 != null) {
+        if(l1==null){
+            return l2;
+        }
+        if(l2==null){
+            return l1;
+        }
+        ListNode dummy = new ListNode(-1);
+        ListNode dummynode = dummy;
+         int carry = 0;
+        while(l1!=null||l2!=null){
+            int val1 = l1==null?0:l1.val;
+            int val2 = l2==null?0:l2.val;
+            ListNode cur = new ListNode((val1+val2+carry)%10);
+            dummynode.next = cur; 
+            if(l1!=null){
                 l1 = l1.next;
             }
-            if (l2 != null) {
-                l2 = l2.next;
+            if(l2!=null){
+                l2 = l2.next; 
             }
+            dummynode = dummynode.next;
+            carry = (val1+val2+carry)/10;    
         }
-        if (carry > 0) {
-            tail.next = new ListNode(carry);
+        if(carry>0){
+            dummynode.next = new ListNode(carry);
         }
-        return head;
-    }
+    
+        return dummy.next;
+    } 
 }
 
 
@@ -456,27 +465,35 @@ class Solution {
 
   - 迭代 + 节点拆分
     ```java
-    class Solution {
+
+class Solution {
     public Node copyRandomList(Node head) {
-        if (head == null) {
-            return null;
+        Node dummy = new Node(-1);
+        Node dummynode = dummy;
+        Node cur = head;
+        while(cur!=null){
+            Node temp = cur.next;
+            cur.next = new Node(cur.val);
+            cur.next.next = temp; 
+            cur = temp;
         }
-        for (Node node = head; node != null; node = node.next.next) {
-            Node nodeNew = new Node(node.val);
-            nodeNew.next = node.next;
-            node.next = nodeNew;
+        Node node = head;
+        while(node!=null){
+            Node newnode = node.next;
+            newnode.random = (node.random != null) ? node.random.next : null;
+            node = newnode.next;
+           
         }
-        for (Node node = head; node != null; node = node.next.next) {
-            Node nodeNew = node.next;
-            nodeNew.random = (node.random != null) ? node.random.next : null;
+        Node newHead = head;
+        while( newHead !=null&& newHead .next!=null){
+            dummynode.next =  newHead.next;
+            dummynode = dummynode.next;
+            Node temp = newHead.next.next;
+            newHead.next.next = null;
+            newHead.next = temp;
+            newHead  =  newHead.next;
         }
-        Node headNew = head.next;
-        for (Node node = head; node != null; node = node.next) {
-            Node nodeNew = node.next;
-            node.next = node.next.next;
-            nodeNew.next = (nodeNew.next != null) ? nodeNew.next.next : null;
-        }
-        return headNew;
+        return dummy.next;
     }
 }
 

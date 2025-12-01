@@ -279,4 +279,187 @@
     - 对每个位置求左最大和右最大的最小值-当前索引位置的值
     - 最后遍历结果数组求和
 
-    
+
+- 最长公共前缀 
+  #image("/assets/Screenshot_20251129_155208.png")
+  - 列式对比
+  ```java
+    class Solution {
+        public String longestCommonPrefix(String[] strs) {
+            if(strs.length==1){
+                return strs[0];
+            }
+            int n = strs[0].length();
+            StringBuffer ans = new StringBuffer();
+            ans.append("");
+            for(int i=0;i<n;i++){
+                char temp = strs[0].charAt(i);
+                for(int j=1;j<strs.length;j++){
+                    if(i<strs[j].length()&&strs[j].charAt(i)==temp){
+                        if(j==strs.length-1){
+                            ans.append(temp);
+                        }
+                        
+                    }
+                    else{
+                            return ans.toString();
+                        }
+                }
+            }
+            return ans.toString();
+        }
+    } 
+  ```
+
+
+- 找出字符串中第一个匹配项的下标
+  - 暴力
+    ```java
+    class Solution {
+    public int strStr(String haystack, String needle) {
+        int n = haystack.length();
+        int m = needle.length();
+        for(int i=0;i+m<=n;i++){
+            boolean flag = true;
+            for(int j=0;j<m;j++){
+                
+                if(haystack.charAt(i+j)!=needle.charAt(j)){
+                    flag = false;
+                    continue;
+                }
+            }
+               if(flag){
+                    return i;
+                }
+        }
+        return -1;
+    }
+}
+    ```
+  - KMP
+
+
+
+- 验证回文串
+    ```java
+    class Solution {
+        public boolean isPalindrome(String s) {
+            int n = s.length();
+            int left = 0;
+            int right = n-1;
+            while(left<right){
+                while(left<=n-1&&!Character.isLetterOrDigit(s.charAt(left))){
+                    left++;
+                }
+                while(right>=0&&!Character.isLetterOrDigit(s.charAt(right))){
+                    right--;
+                }
+                if(left<right){
+                if(Character.toLowerCase(s.charAt(left))!=Character.toLowerCase(s.charAt(right))){
+                    return false;
+                }
+                left++;
+                right--;
+                    }
+            }
+            return true;
+        }
+    }
+    ```
+    - 在每次判断的时候都while判断左右指针是否是数字或字母，若不是则移动指针
+    - 若左右指针都是数字或字母则转小写进行比较
+    - 注意，有可能在前面的while循环中，指针已经越界了，所以while中要判断越界，同时在比较之前要判断left和right是否越界
+
+
+- 判断子序列
+  #image("/assets/Screenshot_20251201_114804.png")
+  ```java
+  class Solution {
+    public boolean isSubsequence(String s, String t) {
+        int n = s.length();
+        int m =t.length();
+        boolean[][] matrix = new boolean[n+1][m+1];
+        for(int j=0;j<=m;j++){
+            matrix[0][j] = true; // 空字符串是任何字符串的子序列
+        }
+        for(int i=1;i<=n;i++){
+            for(int j=1;j<=m;j++){
+                if(s.charAt(i-1)==t.charAt(j-1)){
+                    matrix[i][j]=matrix[i-1][j-1];
+                }
+                else{
+                    matrix[i][j]=matrix[i][j-1];
+                }
+            }
+        }
+        return matrix[n][m];
+    }
+}
+  ```
+  - 由于题目规定了s比j小，所以只需要判断s是否是t的子序列
+  - 定义一个二维数组matrix，matrix[i][j]表示s的前i个字符是否是t的前j个字符的子序列
+  - 初始化matrix[0][j]为true，因为空字符串是任何字符串的子序列
+  - 遍历s和t的每个字符，若相等则matrix[i][j]=matrix[i-1][j-1]，否则matrix[i][j]=matrix[i][j-1]，也就是说新增的t的字符不影响子序列的判断，新增的t的字符的boolean结果由前一个t的字符决定
+  - 最后返回matrix[n][m]即可
+
+- 长度最小的子数组     
+  #image("/assets/Screenshot_20251201_165300.png")
+  - 滑动窗口
+    ```java
+    class Solution {
+    public int minSubArrayLen(int target, int[] nums) {
+        int start = 0;
+        int end = 0;
+        int n = nums.length;
+        int sum = 0;
+        int ans = Integer.MAX_VALUE;
+        while(end<n){
+            sum+=nums[end];
+            while(sum>=target){
+                ans = Math.min(ans,end-start+1);
+                sum -= nums[start];
+                start++;
+            }
+            end++;
+        }
+        return ans==Integer.MAX_VALUE?0:ans;
+    }
+}
+    ```
+    - 子数组，意味着不能排序
+    - 使用滑动窗口，end指针不断向右移动，直到子数组和大于等于target
+    - 然后移动start指针，直到子数组和小于target。（这里的意义是，因为end移动找到子数组和大于等于target是有可能使用了超过它所需要的最小个数的）
+    - 每次移动start指针时，更新最小长度，直到子数组和小于target然后继续移动end指针
+    - 最后返回最小长度即可
+
+
+- 有效的数独
+  #image("/assets/Screenshot_20251201_170759.png")
+  ```java
+  class Solution {
+    public boolean isValidSudoku(char[][] board) {
+        int[][] row = new int[9][9];
+        int[][] line = new int[9][9];
+        int[][][] q = new int[3][3][9];
+        for(int i=0;i<9;i++){
+            for(int j=0;j<9;j++){
+                if(board[i][j]!='.'){
+                    int temp = board[i][j]-'0'-1;
+                    row[i][temp]+=1;
+                    line[j][temp]+=1;
+                    q[i/3][j/3][temp]+=1;
+                    if(row[i][temp]>1||line[j][temp]>1||q[i/3][j/3][temp]>1){
+                    return false;
+                }
+                }
+               
+            }
+        } 
+        return true;
+    }
+}
+  ```
+  - 使用三个数组分别记录行、列、九宫格中数字出现的次数
+  - 遍历数独，遇到数字就更新对应的行、列、九宫格的数字出现次数
+  - 如果某个数字出现次数大于1则返回false
+  - 遍历结束后返回true即可

@@ -283,6 +283,9 @@
     - 一般从以下几个角度入手：执行计划、SQL 写法、索引设计、统计信息、数据分布等。
     - 确认是否真的“用到了”索引
       - 查看执行计划（EXPLAIN / EXPLAIN ANALYZE）
+        - expain的type字段中，什么样的需要优化
+          -  ALL（全表扫描）
+          - index（全索引扫描）
     - 检查索引是否被正确设计
       - 联合索引最左匹配原则
       - 范围查询导致后续字段失效
@@ -302,6 +305,14 @@
         - SELECT \* FROM orders WHERE id > ? ORDER BY id LIMIT 20;  -- 利用索引游标
         - 先查 id 再回表
     - 查看慢查询日志
+      - 临时开启（重启后失效）
+        - 在 MySQL 命令行执行
+        ```
+        SET global slow_query_log = 1;                -- 开启慢 SQL 日志
+        SET global long_query_time = 1;               -- 阈值：执行超过 1 秒算慢 SQL
+        SET global slow_query_log_file = '/var/log/mysql/slow.log';  -- 日志文件路径
+       ```
+      - 永久开启（修改 my.cnf）
     - 看是否存在回表
 
 
