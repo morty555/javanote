@@ -1,0 +1,6 @@
+# 忽略 PDF 文件
+*.pdf
+
+# 忽略 PPT 文件（包括 pptx 等新格式）
+*.ppt
+*.pptx

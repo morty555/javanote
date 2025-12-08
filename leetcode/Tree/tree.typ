@@ -359,7 +359,7 @@
         - 如果等于k说明是当前节点
         - 否则就在右子树
     - 通过不断遍历直到找到第k小元素
-    
+    - 注意，遍历右叉树时是先把root.right赋值给root而不是直接把right push进队列，因为right可能为空，并且right左子树还有子节点
 
 
     - AVL树，比二叉搜索树更平衡，搜索效率更高
@@ -369,42 +369,21 @@
   #image("Screenshot_20251021_100819.png")
   - 深度遍历 
     ```java
-    class Solution {
+   class Solution {
     public List<Integer> rightSideView(TreeNode root) {
-        Map<Integer, Integer> rightmostValueAtDepth = new HashMap<Integer, Integer>();
-        int max_depth = -1;
-
-        Deque<TreeNode> nodeStack = new LinkedList<TreeNode>();
-        Deque<Integer> depthStack = new LinkedList<Integer>();
-        nodeStack.push(root);
-        depthStack.push(0);
-
-        while (!nodeStack.isEmpty()) {
-            TreeNode node = nodeStack.pop();
-            int depth = depthStack.pop();
-
-            if (node != null) {
-            	// 维护二叉树的最大深度
-                max_depth = Math.max(max_depth, depth);
-
-                // 如果不存在对应深度的节点我们才插入
-                if (!rightmostValueAtDepth.containsKey(depth)) {
-                    rightmostValueAtDepth.put(depth, node.val);
-                }
-
-                nodeStack.push(node.left);
-                nodeStack.push(node.right);
-                depthStack.push(depth + 1);
-                depthStack.push(depth + 1);
-            }
+        List<Integer> ans = new ArrayList<>();
+        dfs(root,1,ans);
+        return ans;
+    }
+    public void dfs(TreeNode root,int level,List<Integer> ans){
+        if(root==null){
+            return ;
         }
-
-        List<Integer> rightView = new ArrayList<Integer>();
-        for (int depth = 0; depth <= max_depth; depth++) {
-            rightView.add(rightmostValueAtDepth.get(depth));
+        if(level>ans.size()){
+            ans.add(root.val);
         }
-
-        return rightView;
+        dfs(root.right,level+1,ans);
+        dfs(root.left,level+1,ans);
     }
 }
 
