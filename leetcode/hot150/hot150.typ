@@ -463,3 +463,29 @@
   - 遍历数独，遇到数字就更新对应的行、列、九宫格的数字出现次数
   - 如果某个数字出现次数大于1则返回false
   - 遍历结束后返回true即可
+
+- 同构字符串
+  #image("/assets/Screenshot_20251210_155443.png")
+  ```java
+  class Solution {
+    public boolean isIsomorphic(String s, String t) {
+        Map<Character, Character> s2t = new HashMap<Character, Character>();
+        Map<Character, Character> t2s = new HashMap<Character, Character>();
+        int len = s.length();
+        for (int i = 0; i < len; ++i) {
+            char x = s.charAt(i), y = t.charAt(i);
+            if ((s2t.containsKey(x) && s2t.get(x) != y) || (t2s.containsKey(y) && t2s.get(y) != x)) {
+                return false;
+            }
+            s2t.put(x, y);
+            t2s.put(y, x);
+        }
+        return true;
+    }
+}
+  ```
+  - 因为同构，因此可以让s的每一位对应t的每一位
+  - 使用两个哈希表分别记录s到t和t到s的映射
+  - 遍历s和t的每一位，若s到t的映射已经存在且不等于当前t的字符，或者t到s的映射已经存在且不等于当前s的字符，则返回false
+  - 否则更新映射关系
+  - 遍历结束后返回true即可

@@ -50,22 +50,26 @@
 - 跳跃游戏 II
   #image("Screenshot_20251110_143748.png")
   ```java
-  class Solution {
-    public int jump(int[] nums) {
-        int length = nums.length;
-        int end = 0;
-        int maxPosition = 0; 
-        int steps = 0;
-        for (int i = 0; i < length - 1; i++) {
-            maxPosition = Math.max(maxPosition, i + nums[i]); 
-            if (i == end) {
-                end = maxPosition;
-                steps++;
+        class Solution {
+            public int jump(int[] nums) {
+                int n = nums.length;
+                int end = 0;
+                int maxposition = 0;
+                int steps = 0;
+                for(int i=0;i<n;i++){
+                    maxposition = Math.max(maxposition,nums[i]+i);
+                    if(end == n-1){
+                        return steps;
+                    }
+                    if(i==end){
+                        steps++;
+                        end = maxposition;
+                    }
+                }
+                return steps;
+                
             }
         }
-        return steps;
-    }
-}
 
   ```
     - 每次遍历更新maxposition，也就是当前步数和当前位置能到达的最远位置
