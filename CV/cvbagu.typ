@@ -4,7 +4,8 @@
 = 反问  
   - 在刚刚的面试中，有哪些问题答的不太好的，自己可以提升的点在哪里
   - 企业招聘校招生的时候更看重哪些方面
-  - 校招生更应该注重基础知识的学习还是进阶知识，因为我看现在很多招聘条件上都有大数据和AI相关的知识，你们招聘的时候会看作这些点吗
+  - 在后端开发岗位，校招生更应该注重基础知识的学习还是进阶知识，因为我看现在很多招聘条件上都有大数据和AI相关的知识，你们招聘的时候会看重这些点吗
+  - 对于自己做的项目，在高并发等方面没有什么工程和实践经验，只能靠着理论知识去推测或者去网上学习然后借鉴到自己的项目，面试的时候这种项目容易出问题，但是只有单体项目知识点又感觉有点单薄，如何解决这个问题
   - 还会有进一步的筛选吗
   - 面试结果什么时候出
   
@@ -88,9 +89,69 @@
     - 以达成目标为导向
 
 = 图像纤维识别平台
+- 讲一下你这个项目主要负责的点和做了什么
+  - 图像上传与存储链路优化
+    - 项目中 TIFF 原始图片普遍很大，接口耗时主要卡在上传和 I/O 上，这是我重点攻克的地方。
+    - 我做了几件关键事情
+      - 使用 OSS Multipart Upload
+        - 在 同一个 uploadId 下
+          - uploadid是用来区分分片是 哪一次上传任务的，在初始化上传获取，后续向oss发起合并请求时带上
+          - PartETag是分片上传成功后返回的标识，用list收集所有上传成功的tag在最后合并时上传
+          - 后端通过 多线程并发上传不同 offset 的分片
+          - 分片合并交给 OSS 服务端完成
+        - 单张大 TIFF 上传从 2–3 秒级 → 毫秒级返回 upload 成功状态
+      -  解决 Spring MVC 临时文件落盘导致的 I/O 延迟
+        - Spring MVC 对 MultipartFile 的默认行为是大文件 → 先落盘到临时文件，再从磁盘读 → 上传 OSS
+        - 我的解决方案关闭 Multipart 临时文件落盘，file-size-threshold: 0，直接从 HTTP InputStream → OSS OutputStream，实现真正的 流式上传，避免磁盘IO
+      - TIFF + 压缩图映射设计
+        - TIFF 太大，前端展示慢
+        - 我设计：压缩图用于展示，原始 TIFF 用于分析与下载
+        - 但引入了新问题：如何从压缩图找到原始 TIFF？
+        - 解决方式：借鉴「短链接」思想，建立 compressed_url → original_tiff_url 映射表
+        - 用户下载时，后端查找映射，直接 302 重定向到 OSS 原图
+  - 识别接口耗时长 → 全链路异步化
+    - 这个主要在用户体验上解决，识别本身是耗时任务，不能阻塞接口
+    - RabbitMQ 异步解耦
+      - 上传成功后：只返回 taskId，识别任务通过 RabbitMQ 异步执行
+    - 消息可靠性与可恢复设计
+      - 生产者：Spring Retry + ConfirmCallback
+      - 消费者：自动重试，延迟队列，死信队列
+      - 避免消息丢失，也防止无限重试拖垮系统
+  - 多图并发识别的幂等与重复消费问题
+    - 多线程 + 多实例下，重复消费是必然会遇到的坑
+    - 我的解决方案：
+      - 每个识别任务生成 唯一 taskId
+      - 消费前：
+        - 查询任务表
+        - 校验状态（PENDING / RUNNING / SUCCESS / FAILED）
+        - 已处理任务直接丢弃
+      - 配合 WebSocket
+        - 前端不轮询
+        - WebSocket 实时推送任务状态
+        - XXL-JOB 定时扫描 FAILED 任务并告警
+          - 有面试官说过这个地方其实可以优化，没必要定时扫描，每次识别完发送就可以了，消息表容易出现消息太多导致表太大的问题
+  - 查询慢 & 图识图慢的优化
+    - 缓存 + CDN
+      - 权威数据集图片：CDN → 回源 OSS
+      - 热点查询：Redis + Caffeine+布隆过滤器
+      - 图识图结果缓存，避免重复计算
+  - 因为识别服务能力有限：需要限流
+
+
 - 你挑你这个项目最困难的点说说 
   - 接口耗时长
     - TIFF图片上传展示处理的时延问题，从2-3秒降至毫秒
+      - 把大图片分片上传
+        - 多线程
+        - OSS Multipart Upload 自带分片和合并
+        - 后端通过 OSS 的 Multipart Upload，在同一个 uploadId 下使用多线程并发上传不同 offset 的分片，由 OSS 服务端完成合并，从而显著提升大文件上传效率。 
+        - 逻辑如下：
+                前端
+          └── 整图上传到后端（或本地文件）
+                └── 后端
+                      └── OSS MultipartUpload
+                            └── 并发 uploadPart(offset)
+
       - 解决网络延迟问题
         - 大图片上传耗时->流式上传,避免临时文件落盘
           - 原因
@@ -142,7 +203,7 @@
   - 观察者模式
     - 当一个对象变化时，它会自动通知所有依赖它的对象，所有对象因此自动更新。
     - websocket 
- 
+  
 
 - 消息队列
   - 为什么要用消息队列？
@@ -179,20 +240,23 @@
       - 生产者角度防止重复
         -  消息唯一标识（幂等ID）
           - 在发送消息前，为每条消息生成唯一ID（如业务订单号、UUID）。即使重复发送，同一消息ID不会被重复处理。
-        - 启用 ConfirmCallback 并做幂等确认
-          - RabbitMQ 的 Publisher Confirms 模式允许你注册回调，确认每条消息是否成功到达 Broker。
-            - RabbitMQ 原生 API 支持发布确认。
-              - channel.confirmSelect()开启 Confirm 模式
-              - channel.addConfirmListener注册发布确认异步回调
-              - 发送消息
-          - ConfirmCallback 不确认消息是否到达队列，只是确认消息是否到达 Exchange。如果 Exchange 收到消息但是没有路由到任何队列，这时会触发 ReturnCallback（需开启 mandatory）。
       - 消费者角度防止重复
         - 消费幂等
           - 可以用：Redis、数据库唯一索引、分布式锁，第一次消费时执行并记录；再次消费时检测到已处理，直接跳过。
-        - 消费 offset 精确提交
-          - RabbitMQ：手动 ack 模式，确认消息处理完毕再 ack。
-          - Kafka：手动提交 offset（enable.auto.commit=false），确保只有处理成功后才提交。
-          - RocketMQ：返回 ConsumeConcurrentlyStatus.CONSUME_SUCCESS 后才算成功。
+       
+    - 消息丢失如何解决
+      - 启用 ConfirmCallback 并做幂等确认
+        - RabbitMQ 的 Publisher Confirms 模式允许你注册回调，确认每条消息是否成功到达 Broker。
+          - RabbitMQ 原生 API 支持发布确认。
+            - channel.confirmSelect()开启 Confirm 模式
+            - channel.addConfirmListener注册发布确认异步回调
+            - 发送消息
+        - ConfirmCallback 不确认消息是否到达队列，只是确认消息是否到达 Exchange。如果 Exchange 收到消息但是没有路由到任何队列，这时会触发 ReturnCallback（需开启 mandatory）。
+      - 消费 offset 精确提交  
+        - RabbitMQ：手动 ack 模式，确认消息处理完毕再 ack。
+        - Kafka：手动提交 offset（enable.auto.commit=false），确保只有处理成功后才提交。
+        - RocketMQ：返回 ConsumeConcurrentlyStatus.CONSUME_SUCCESS 后才算成功。
+      - 消息队列持久化
 
   - rabbitmq 
     - RabbitMQ的特性你知道哪些？
@@ -204,13 +268,18 @@
         - 多种交换器类型：RabbitMQ 提供了多种类型的交换器，如直连交换器（Direct Exchange）、扇形交换器（Fanout Exchange）、主题交换器（Topic Exchange）和头部交换器（Headers Exchange）。不同类型的交换器根据不同的规则将消息路由到队列中。例如，扇形交换器会将接收到的消息广播到所有绑定的队列中；主题交换器则根据消息的路由键和绑定键的匹配规则进行路由。
 
     - Rabbitmq的路由过程
-      - 先路由到exchange交换机再在交换机中根据routingkey路由到队列
+      - Direct，Topic先路由到exchange交换机再在交换机中根据routingkey路由到队列。
+        - Direct：routing key 必须完全相等，性能更快
+        - Topic：routing key 支持通配符模式匹配
+      - Fanout广播给所有绑定到该交换器的队列。适合日志，配置更新等
+      - Headers根据消息的 headers 键值对，与队列绑定时声明的 headers 规则进行匹配，匹配成功才会路由到队列。  
+
 
     - RabbitMQ的底层架构是什么？
       - 核心组件：生产者负责发送消息到 RabbitMQ、消费者负责从 RabbitMQ 接收并处理消息、RabbitMQ 本身负责存储和转发消息。
       - 交换机：交换机接收来自生产者的消息，并根据 routing key 和绑定规则将消息路由到一个或多个队列。
       - 持久化：RabbitMQ 支持消息的持久化，可以将消息保存在磁盘上，以确保在 RabbitMQ 重启后消息不丢失，队列也可以设置为持久化，以保证其结构在重启后不会丢失。
-      - 确认机制：为了确保消息可靠送达，RabbitMQ 使用确认机制，消费费者在处理完消息后发送确认给 RabbitMQ，未确认的消息会重新入队。
+      - 确认机制：为了确保消息可靠送达，RabbitMQ 使用确认机制，消费者在处理完消息后发送确认给 RabbitMQ，未确认的消息会重新入队。
       - 高可用性：RabbitMQ 提供了集群模式，可以将多个 RabbitMQ 实例组成一个集群，以提高可用性和负载均衡。通过镜像队列，可以在多个节点上复制同一队列的内容，以防止单点故障。
     - 为什么 RabbitMQ 要设计成必须有 Exchange
       - 一条消息路由到多个队列
@@ -286,7 +355,10 @@
         - Erlang自带分布式通信框架和虚拟机
         - rabbitmq通过这个分布式通信框架在broker中通信
         - 如果连接断开，可能出现多个broker都认为自己是主节点的问题，导致脑裂问题
+          - A、B、C 网络断开，A认为自己联系不上 B、C，它们可能挂了，A还是主节点，B，C也这样认为，就出现问题
         - 解决方法就是使用raft一致性算法来同步数据
+          - 采用多数派原则，Leader 选举：必须拿到 > N/2 的票，保证只有一个主
+
   - rabbitmg吞吐量可以达到什么量级，为什么性能好
     - 官方基准测试（非持久化消息，单队列单节点）可以达到 >100,000 消息/秒
     - 持久化消息吞吐量会明显下降，因为需要写磁盘。持久化、高确认和大消息场景下会下降到几千到几万条/秒。
@@ -392,6 +464,44 @@ public void orderConsumer(String msg) {
 
   ```
   - 如果你想让不同 group 用不同配置（比如不同反序列化、不同隔离级别），可以写多个 factory。
+
+
+- kafka可靠性，kafka底层协议？底层使用HTTP吗，底层用TCP还是UDP为什么。利用TCP什么特性
+  - Kafka 的可靠性是怎么保证的？
+    - Producer → Broker 可靠性
+      - ACK 机制：Producer 发送消息后，Broker 返回确认
+      - 重试机制 + 幂等性：每条消息有 PID + 序列号
+    - Broker 内部可靠性
+      - 副本机制
+        - 每个 Partition 有：1 个 Leader和N 个 Follower
+      - ISR（In-Sync Replica）
+        - ISR = 与 Leader 保持同步的副本集合，只有 ISR 副本才有资格参与 Leader 选举
+      - 数据落盘（顺序写）
+        - Kafka 写磁盘，不是只写内存
+        - 顺序写 + Page Cache
+    - Consumer 端可靠性
+      - Offset手动提交
+  - Kafka 底层通信协议是什么？
+    - Kafka 不使用 HTTP，HTTP 开销太大，不适合高吞吐消息系统
+    - Kafka 使用的是：TCP，自定义 Binary Protocol，基于 NIO（非阻塞 IO）
+      - TCP提供可靠传输，有序性保证，流量控制（滑动窗口），长连接（减少系统调用），零拷贝（sendfile）
+    - Kafka 不使用 UDP，因为UDP不可靠，无顺序，无重传，包大小受限
+
+- 为了保证kafka特性，你考虑基于http/tcp怎么对协议进行改造
+  - 定长 Header，紧凑二进制编码，可零拷贝
+  - 单 TCP 连接多路复用 + Pipeline
+  - 顺序性保障
+    - Partition 内单线程写和递增OFFSET
+
+- 了解kafka底层存储吗，磁盘存储对吧。partition在磁盘中的存储结构?
+  - Kafka 的底层是磁盘存储（Disk-based）
+  - 一个 Topic → 多个 Partition → 每个 Partition 在磁盘上是一个目录。每个 Partition 本质上就是一个“只追加写的日志（Log）”。
+  - Partition 内部 = 多个 Segment（段文件）
+    - 为什么要切 segment？
+      - 防止单文件无限增长
+      - 方便：日志删除，日志压缩，快速定位 offset
+
+
 
 - RocketMQ
   - 是对kafka的继承和改进
@@ -622,7 +732,12 @@ public void orderConsumer(String msg) {
     - 用“本地消息表 + ConfirmCallback”模式来实现事务消息
     - RabbitMQ 没有像 RocketMQ 那样的原生事务消息机制，它早期的 txSelect 模式性能太低，也无法与数据库事务原子提交。
 
-    
+  
+  - 你有测量过接口的压力吗
+    - 压缩后单图片200-300kb，传输时间大约0.5-0.8s的范围，那单请求的带宽是0.25 ～ 0.6 MB/s（2～5 Mbps）  
+    - 再测服务器出口流量进行计算就知道可以同时并发多少请求
+  -  对于 300KB 级别的小图片，同地域上传 OSS 的 RT 正常在几十毫秒，如果实际 RT 达到 500–800ms，说明并非带宽瓶颈，而是存在跨地域、磁盘落盘或同步阻塞等问题，需要从上传链路和 I/O 流程排查。
+
   - 如果有成千上万张图片同时上传，消费者压力如何？
     - 单消费者：
       - 消费速度跟不上消息产生速度 → 队列消息堆积
@@ -709,7 +824,7 @@ public void orderConsumer(String msg) {
 
 
   - redis怎么设计的
-    - 以纤维类型为key,识别数据为value
+    - List结构，以纤维类型为name,识别数据为value
 
   - 删除数据如何删
     - 先
@@ -733,10 +848,12 @@ public void orderConsumer(String msg) {
     - redisson是分布式系统共享数据的，guava只在单机下共享
 
   - 你是如何设置布隆过滤器的参数的？
-    - 1万条数据，允许误判率 0.01（1%）
+    - 1万的元素个数，允许误判率 0.01（1%）
 
   - 布隆过滤器无法删除问题如何解决的
     - 用Redis的hash结构存储每个类别的数量，进入lua脚本后先判断类别数量是否大于0,大于0说明没有误判
+    - 后续思考下来，这个有点为了面试而拓展，完全可以直接用hash来解决未知数据的过滤问题，因为本身hash存储的只是类别的数据条数而不是完整数据，占用内存本身就不高，用布隆过滤器+hash有点臃肿了
+
 
   - 你有了解过计数器布隆过滤器吗，和你这个方案的区别是什么？
     - 计数器布隆过滤器存储的不是bit，而是int，但是空间占用更多，因为计数器占多位（通常 4 或 8 bits），空间大约是普通布隆过滤器的 4–8 倍。实现复杂度略高，需要维护计数器数组，防止溢出，还要考虑并发更新安全。并且依旧存在“误判存在”问题，适合频繁增删数据的高并发场景
@@ -802,7 +919,7 @@ public void orderConsumer(String msg) {
   - 传统 LRU（最近最少使用）策略存在几个问题：
     - 缓存抖动（Cache Pollution）
       - 突然出现的大量一次性访问数据会把热数据挤出缓存。例如：一次性扫描 100 万条新数据，LRU 会把原本频繁访问的小数据全部踢掉。
-    - 命中率不够高。LRU 只考虑最近访问时间，不考虑访问频率。
+    - 命中率不够高。LRU 只考虑最近访问时间，不考虑访问频率。  
   - Window-TinyLFU 核心思想
     - Window 部分（新数据区）
       - 缓存的一小部分（比如 1/32）用于存放 最新访问的条目。
@@ -865,6 +982,18 @@ public void orderConsumer(String msg) {
     - 淘汰逻辑会选择 链表尾部节点，如果后台刷新线程还没处理最近的访问，链表顺序可能 不是最新的
 
 
+- 为什么需要redis+caffeine二级缓存
+  - Redis 是远程缓存，哪怕部署在同城内网，也存在这些现实问题
+    - 网络开销不可忽略
+    - Redis 扛不住“全部请求”
+    - Redis 宕机 = 全系统风险
+  - 如果只用CAFFEINE
+    - 数据不一致
+    - 本地内存有限
+    - 服务重启缓存全丢
+  - 结合起来可以用 Caffeine 抗高频，用 Redis 保一致，用 DB 兜底
+  - 写策略：先写 DB → 删除 Redis->删除 Caffeine
+
 
 - 令牌桶 redis lua aop
   - 如何实现限流功能的
@@ -880,6 +1009,8 @@ public void orderConsumer(String msg) {
   - 令牌桶如何处理突发流量？
     - 当请求到来时，如果桶里有足够令牌，可以一次性放行；
     - 如果没有令牌，则拒绝或排队。
+  - 为什么使用令牌桶
+    - 因为做了消息队列削峰，我觉得是可以适当允许突发流量的，这样用户体验比较好，不然用户上传图片一多就被拒绝，但其实用户上传的图片是在系统负载内的
   - 为什么使用REDIS 
     - 多节点共享令牌桶状态，实现全局限流；
     - 高性能、低延迟。
@@ -907,6 +1038,16 @@ public void orderConsumer(String msg) {
       - 本地缓存令牌
     - 增加应用实例
 
+- 限流还可以有滑动窗口的策略，如何实现
+  - 用redis的list实现
+  - list里的数据记录时间戳
+  - 假设60s内最多运行5个请求
+  - 每次请求来的时候先判断滑动窗口最老的请求是否超时，一直判断到不超时的最老请求
+  - 将前面的超时请求删除，让新请求加入
+  - 如果前面没有超时的请求，说明滑动窗口已满，60s内已经有五个请求了，进行限流
+  - list本身支持获得当前长度
+
+
 - JAVAAOP原理
   - AOP（Aspect-Oriented Programming，面向切面编程）主要思想是把 横切关注点（如日志、事务、安全校验）从业务逻辑中抽离出来，通过 代理 在运行时动态“织入”到目标对象的方法执行中。
   - 核心概念
@@ -929,6 +1070,9 @@ public void orderConsumer(String msg) {
     - CGLIB开销大是因为，JDK动态代理类中所有方法调用都会委托给一个 InvocationHandler 的 invoke() 方法。代理类本身非常轻量。CGLIB 需要生成完整子类，所以开销大。
     - jdk动态代理的代理类生成时：只生成了一个实现了接口的轻量类，本身没有原方法逻辑。目标对象方法逻辑：完全在 真实对象（target） 上。代理类的作用就是将调用委托给 InvocationHandler.invoke()。在 invoke() 中可以执行切面逻辑（增强），再通过反射调用目标对象方法。
 
+- 为什么 Spring MVC 会落盘
+  - 这是 Spring MVC 对 MultipartFile 的默认安全与内存保护机制，为了避免大文件直接占用堆内存，避免 OOM，会在超过阈值时先写入磁盘临时文件。
+  - 这可能会带来图片size太大导致oom,所以前端需要校验每张图片大小，加上后端对接口限流双重保证
 
 
 - 了解sentinel吗
@@ -977,7 +1121,7 @@ public void orderConsumer(String msg) {
 - 那http和websocket区别是什么
   - HTTP 是请求-响应协议，而 WebSocket 是双向实时通信协议。双向：客户端和服务端都能主动发送消息
   - HTTP	每次请求都新建或复用连接（短连接或HTTP/2多路复用） WebSocket通过一次 HTTP 握手升级为 WebSocket 长连接
-  - HTTP无状态（每次请求独立） WebSocket有状态（连接保持不断开）
+  - HTTP无状态（每次请求独立） WebSocket有状态（连接保持不断开）可以直接保存连接上下文
   - HTTP基于文本（HTTP 报文头+体），Websocket二进制帧（更轻量）
   - HTTP实时性弱，WebSocket实时性强
   - 传输协议都是TCP
@@ -994,12 +1138,11 @@ public void orderConsumer(String msg) {
 
 
 - 项目里面用了Redission分布式锁做幂等，原理是什么？Redission分布式锁的原理呢？他是如何做锁超时释放的？如何做锁释放的兜底？
-  - 基本流程
-    - Redisson 在 Redis 中执行 SET key value NX PX expireTime
+  - 原理：它通过 Redis Hash 存储线程标识和重入次数，并结合 Lua 脚本，在加锁时判断是否为同一线程，如果是则递增计数，从而实现可重入；解锁时递减计数，只有计数为 0 才真正释放锁。    
   - Redisson 分布式锁的底层原理
-    - Redisson 的分布式锁（RLock）是基于 Redis 的 Lua 脚本 + Pub/Sub 通知机制 实现的。它不仅仅是一个简单的 SETNX。
+    - Redisson 的分布式锁（RLock）是基于 Redis 的 Lua 脚本 + Pub/Sub 通知机制 实现的。
     - 其关键特性包括：
-      - 可重入（同一线程可多次加锁）
+      - 可重入（同一线程可多次加锁） Redis Hash 存储线程标识和重入次数，
       - 自动续期（Watchdog 机制）
       - 异步通知（等待锁释放后通过发布订阅立即唤醒所有等待线程）
     - 加锁流程
@@ -1063,7 +1206,7 @@ public void orderConsumer(String msg) {
   - 线程池管理器 
   - 任务接口 
   - 拒绝策略
-
+         
 - 线程池的原理
   - 线程池的原理可以总结为一句话：通过复用固定数量的工作线程来执行大量的异步任务，从而减少线程频繁创建与销毁的开销，并提升系统的吞吐量与稳定性。
   - 线程池主要包含以下几个核心组件：
@@ -1154,7 +1297,28 @@ public void orderConsumer(String msg) {
   - 线程数 = CPU 核数 （1 + IO/CPU 时间比）
   - 实际经验中 Web 服务通常配置为核数 × 2~4。
   - 最终配置还要依据压测结果，通过 JStack、线程池监控、队列长度来不断调优。
+  - 就比如我这个项目，在oss上传图片时是IO密集型，因此这里用的是cpu核数\*2
 
+- 单消费者多线程，有问题
+  - 虽然本身业务不需要消息的顺序性
+  - 拉消息速度 > 处理速度，就会有unacked 消息堆积导致oom  
+  - Channel 线程不安全问题
+    - ACK 错乱 = 你以为你确认的是“这条消息”，但 RabbitMQ 实际收到的是“另一条消息的确认”。
+    - 多个线程用同一个 Channel。当ack时，Channel 内部要做的事是：
+      - 写协议帧
+      - 更新 unacked 状态
+      - 更新内部指针
+    - 但是有可能线程A：准备发 ACK(1)，线程B：修改了 channel 状态，线程A：实际发出了 ACK(2)
+  - 因此要改成使用多消费者单线程
+
+- 多消费者单线程会出现多个消费者线程消费一个未消费的订单，这个情况如何解决
+  - 出现原因，a消费者线程消费失败，消息回到消息队列被b消费者线程拿到
+  - 数据库加锁
+    - 乐观锁
+    - 悲观锁
+  - REDIS分布式锁，利用订单SETNX
+  - 幂等性保障
+  - 将订单ID通过哈希函数映射到固定线程编号，使得同一个订单始终由同一个线程消费，从而天然避免并发问题。
 
 - 你项目里使用了LinkedBlockingQueue，为什么？
   - 我的多线程调用在多图像识别的逻辑上，用于异步执行上传和消息发送
@@ -1162,14 +1326,6 @@ public void orderConsumer(String msg) {
   - LinkedBlockingQueue可以设置容量，如果容量超过了，使用add方法会抛异常，防止内存溢出，put() / take() 会在队列满或空时自动阻塞；可以防止内存耗尽，当队列满时，生产者线程会被阻塞，起到流量控制的作用。
   - 锁分离技术：这是它最核心的优势。它使用 两把锁——putLock 用于入队操作，takeLock 用于出队操作。这意味着生产者和消费者可以同时进行！一个线程在放入元素时，另一个线程可以同时取出元素，极大地提高了并发性能。这与 ArrayBlockingQueue 使用单一锁形成了鲜明对比。
   
-
-- 多个线程同时消费一个未消费的订单这个情况如何解决
-  - 数据库加锁
-    - 乐观锁
-    - 悲观锁
-  - REDIS分布式锁，利用订单SETNX
-  - 幂等性保障
-  - 将订单ID通过哈希函数映射到固定线程编号，使得同一个订单始终由同一个线程消费，从而天然避免并发问题。
 
 
 
@@ -1357,6 +1513,84 @@ public void orderConsumer(String msg) {
 
 
 == RAG（检索增强生成）与知识库构建
+- 向量数据库用的什么
+  - Milvus，ChromaDB
+
+- Milvus
+  - Milvus 是一个专门为“向量相似度搜索”设计的分布式数据库。它用来存储高维向量，并在海量数据下，快速找“最相似的向量”
+  - 典型场景是：文本语义搜索（Embedding），图片 / 视频相似搜索，推荐系统（用户 / 商品向量）RAG（向量检索 + LLM）
+  - 角色定位：给定 query embedding，返回最相关的 K 条上下文
+  - Milvus 不关心 embedding 怎么来的，但你必须保证入库 embedding 模型  ==  查询 embedding 模型，如果不是这样就会召回垃圾结果
+  - Milvus Schema 设计（RAG 不是随便建表）
+    - Schema 的本质作用
+      - 向量如何被索引
+      - 查询时能否被过滤
+      - 返回给 LLM 的上下文长什么样 
+    - Milvus 不是全文数据库，schema 不是为了查询字段，而是为了：“缩小搜索空间 + 携带业务信息”
+
+  - Partition 在 RAG 中的正确用法
+    - Partition = 在物理上把 Collection 拆成多个子集合
+    - 在搜索前减少向量计算
+  - FILTER在流程中处于搜索后的过滤作用
+  - Milvus Search 的核心行为
+    - Search 本质是在干什么？
+      - 在多个 segment 中对每个 segment：用 index 找近邻再合并 TopK
+      - TopK 在 RAG 中的真实意义：
+        - Milvus 的 TopK = 召回候选
+        - LLM 真正用的 = TopN（更小）
+
+  - Milvus 索引是什么？
+    - Milvus 的索引 = 用“近似算法”在“可接受的误差”下，把 O(N) 的向量搜索变成亚线性时间
+    -  FLAT（无索引）把查找向量和数据库里所有向量比对
+    - IVF_FLAT用kmeans算法，将每个向量挂到最近中心。查询时找到最近的 nprobe 个中心，只扫描这些桶里的向量
+    - nlist（建索引时）是桶的数量，太小：桶大，接近全表扫，太大：桶小，管理成本高
+    - nprobe（查询时）决定扫描多少个桶。决定：召回率和延迟
+
+
+- 什么时候用ChromaDB
+  - 文档量 < 100 万
+  - 单机 or 单用户
+  - 本地 / 内部工具
+  - 不想运维、不想调参
+
+
+- 文档来源与处理
+  - Chunk Size 500，Overlap 50
+    - RAG 常见经验值；
+    - 500 字左右能保持语义完整；
+    - 50 字重叠减少分块语义断裂。
+  - Chunk Size（块大小）
+    - “Chunk Size” 是指把一段大文本切分成小段（chunk）时，每个小段的最大长度。
+    - 每个 chunk 会单独进行向量化（Embedding），向量数据库存储每个 chunk 的向量表示。
+    - 在语义搜索或检索问答时，会从所有 chunks 中检索相似内容。
+    - 假设你有一篇 10,000 个 token 的文章：
+      - 如果 chunk_size = 500
+      -  那它会被切成约 20 个 chunk（10000 ÷ 500 = 20）。
+    - chunk 太大：命中但噪声大
+    - chunk 太小：语义不完整
+  - Overlap（重叠大小）
+    - “Overlap” 是相邻两个 chunk 之间重叠的部分长度。
+    - 避免上下文断裂。
+    - 当问题涉及到两个 chunk 的交界处的内容时，重叠能确保语义连续。
+    #image("Screenshot_20251108_165449.png")
+    - 可以看到每个 chunk 之间有 50 token 的重叠。
+    - 为什么需要 Overlap？
+      - 没有OVERLAP句子可能被一刀切断，影响语义完整性。
+      - 比如句子跨越 chunk 边界，后半句丢失上下文，导致语义检索时失效。
+
+- 分块的 6 大主流方法
+  - 固定长度分块（最基础）
+  - 固定长度 + 重叠（我项目在用的）
+  - 基于结构的分块
+    - 利用文档结构比如标题，段落等划分
+  - 递归分块
+    - 优先按“语义结构”切，如果切出来的块还太大，就不断降级，直到满足大小限制。
+  - 语义分块
+
+- rerank的作用和必要性
+  - Rerank = 用“更贵但更准”的模型，对“向量召回的候选结果”重新打分排序。
+  - 向量相似度的“天然缺陷”。Embedding 做的是：整体语义接近度。对于相似的几个问题，他们的向量是相似的，但是如果需要精确匹配，误差就有，所以需要rerank
+
 - Embedding模型配置
   - Embedding 模型选用 text-embedding-v4
     - 最新版本，性能提升明显，支持多种维度（64~2048）。
@@ -1414,30 +1648,7 @@ public void orderConsumer(String msg) {
       - 低温 并不能完全消除 hallucination（因为模型可能“自信地”给出错误事实），但通常会降低无关或花俏的输出。
       - 使用 低温 + 高质量检索（高相关性） 是减少错误的好组合。
 
-- 向量数据库配置
-  - ChromaDB：本地向量数据库，轻量级、易部署，开发阶段理想选择。支持 embedding 插入、语义搜索、持久化。
 
-- 文档来源与处理
-  - Chunk Size 500，Overlap 50
-    - RAG 常见经验值；
-    - 500 字左右能保持语义完整；
-    - 50 字重叠减少分块语义断裂。
-  - Chunk Size（块大小）
-    - “Chunk Size” 是指把一段大文本切分成小段（chunk）时，每个小段的最大长度。
-    - 每个 chunk 会单独进行向量化（Embedding），向量数据库存储每个 chunk 的向量表示。
-    - 在语义搜索或检索问答时，会从所有 chunks 中检索相似内容。
-    - 假设你有一篇 10,000 个 token 的文章：
-      - 如果 chunk_size = 500
-      -  那它会被切成约 20 个 chunk（10000 ÷ 500 = 20）。
-  - Overlap（重叠大小）
-    - “Overlap” 是相邻两个 chunk 之间重叠的部分长度。
-    - 避免上下文断裂。
-    - 当问题涉及到两个 chunk 的交界处的内容时，重叠能确保语义连续。
-    #image("Screenshot_20251108_165449.png")
-    - 可以看到每个 chunk 之间有 50 token 的重叠。
-    - 为什么需要 Overlap？
-      - 没有OVERLAP句子可能被一刀切断，影响语义完整性。
-      - 比如句子跨越 chunk 边界，后半句丢失上下文，导致语义检索时失效。
 
 
 == 会话记忆与上下文管理

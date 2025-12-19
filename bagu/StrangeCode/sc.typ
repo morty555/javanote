@@ -771,3 +771,37 @@ public class TrailingZerosFactorial {
 }
  
   ```
+
+- 使用Java实现三个线程轮流打印“shopee/is/nice”
+  ```java
+  public class PrintShopee {
+
+    private static final Object LOCK = new Object();
+    private static int state = 0; // 0->shopee, 1->is, 2->nice
+
+    public static void main(String[] args) {
+
+        new Thread(() -> print("shopee", 0), "T1").start();
+        new Thread(() -> print("is", 1), "T2").start();
+        new Thread(() -> print("nice", 2), "T3").start();
+    }
+
+    private static void print(String word, int target) {
+        for (int i = 0; i < 5; i++) { // 打印 5 轮
+            synchronized (LOCK) {
+                while (state % 3 != target) {
+                    try {
+                        LOCK.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                System.out.println(word);
+                state++;
+                LOCK.notifyAll();
+            }
+        }
+    }
+}
+  
+  ```
