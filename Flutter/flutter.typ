@@ -176,3 +176,39 @@
       - 主方向上有边界约束的弹性盒子会尽可能地增大尺寸。
       - 主方向上设置了无界约束的弹性盒子会尝试将其子元素适应该空间。每个子元素的flex值都必须设置为零，这意味着当弹性盒子位于另一个弹性盒子或可滚动元素内部时，不能使用 Expanded 此方法；否则会抛出异常。
       - 交叉方向（宽度Column 或高度Row）绝不能无限制，否则就无法合理地对齐其子元素。
+
++ #link("https://dart.dev/guides/language/language-tour#exceptions")
+  - try-on-catch 和 throw
+
++ #link("https://dart.dev/guides/libraries/futures-error-handling ")
+  - 有关编写异步代码时处理错误和异常
+  - 注册的回调函数会根据以下规则触发：如果 Future 执行完毕并返回一个值，则 then() 的回调函数会触发；如果 Future 执行完毕并返回一个错误，则 catchError() 的回调函数会触发。
+  - 在处理 Futures 时，链式调用 then() 和 catchError() 是一种常见的模式，可以将其视为 try-catch 块的粗略等价物。
+  - 无论错误是源自 myFunc() 还是 then()，catchError() 都能成功处理它。
+  - 如果需要区分then里面发生的错误和then之前发生的错误，可以使用以下方法：
+    - 在 then() 中返回一个新的 Future，并在该 Future 上注册 catchError() 回调函数。
+    - 使用 onError 参数为 then() 注册一个错误处理程序。onerror处理后若没有其他错误则不会走到catcherror处理。
+  - 举例如下：
+    #image("/assets/Screenshot_20251228_110820.png")
+    - 在上面的示例中，asyncErrorFunction() 的 Future 的错误由 onError 回调处理；anotherAsyncErrorFunction() 导致 then() 的 Future 以错误完成；此错误由 catchError() 处理。
+  - 一般来说，不建议实现两种不同的错误处理策略：只有在有充分理由需要在 then() 中捕获错误时才注册第二个回调函数。
+  - #image("/assets/Screenshot_20251228_111212.png")
+    - 在上面的代码中，`one()` 返回的 Future 对象会返回一个值，而 `two()` 返回的 Future 对象会返回一个错误。当对一个返回错误的 Future 对象调用 `then()` 方法时，`then()` 的回调函数不会触发。相反，`then()` 返回的 Future 对象会返回其接收者的错误。在我们的示例中，这意味着在调用 `two()` 之后，后续所有 `then()` 返回的 Future 对象都会返回 `two()` 返回的错误。该错误最终会在 `catchError()` 方法中被处理。
+  - catchError() 接受一个可选的命名参数 test，允许我们查询抛出的错误类型。
+    #image("/assets/Screenshot_20251228_111821.png")
+    - 发生错误后，会判断每一个catchError中test中展示的类型是否匹配，如果匹配则执行对应的回调函数。
+  - 使用 whenComplete() 的异步 try-catch-finally 语句
+    - 如果说 then().catchError() 类似于 try-catch，那么 whenComplete() 就相当于 'finally'。whenComplete() 中注册的回调函数会在 whenComplete() 的接收者完成时被调用，无论接收者返回的是值还是错误
+    - 也就是whenComplete()前的函数的返回值
+  - whenComplete() 函数内部出现的错误
+    - 如果 whenComplete() 的回调函数抛出错误，则 whenComplete() 的 Future 对象将以该错误为返回值完成。
+  - 必须在 Future 完成之前安装错误处理程序：这可以避免 Future 完成时出现错误，但错误处理程序尚未附加，导致错误意外传播的情况。
+  - 返回 Future 的函数几乎总是应该在 Future 中抛出错误。由于我们不希望此类函数的调用者需要实现多种错误处理方案，因此我们需要防止任何同步错误泄露。
+    #image("/assets/Screenshot_20251228_113849.png")
+    - 因为OBTAIN函数不在FUTURE链里，无法被CATCHERROR捕获，因此若这个报错就直接退出了，就会产生问题
+    - 为确保函数不会意外抛出同步错误，一种常见的做法是将函数体包装在一个新的 Future.sync() 回调函数中
+    - 如果回调函数返回一个非 Future 类型的值，则 `Future.sync()` 的 Future 将使用该值完成。如果回调函数抛出异常（如上例所示），则 Future 将以错误信息完成。如果回调函数本身返回一个 Future 类型，则该 Future 的值或错误信息将作为 `Future.sync()` 的 Future 完成。
+    - `Future.sync()` 可以让你的代码免受未捕获异常的影响。如果你的函数中包含大量代码
+
++ #link("https://dart.dev/guides/libraries/library-tour#stream")
+  - 如何使用 Dart 核心库的主要功能
